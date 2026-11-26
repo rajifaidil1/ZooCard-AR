@@ -2,6 +2,12 @@
 
 Aplikasi Android Augmented Reality (AR) edukasi satwa yang berjalan 100% offline tanpa koneksi internet. Arahkan kamera belakang HP ke kartu marker QR ZooCard untuk memunculkan model 3D satwa animasi lengkap dengan suara satwa asli, narasi Bahasa Indonesia, fakta singkat, perbandingan tinggi nyata, foto ekspedisi, dan kuis.
 
+## Cuplikan Aplikasi
+
+| Tampilan Satwa 3D | Aksi Makan & Skala 1,2 m | Info & Kuis Satwa | Paspor Penjelajah |
+| :---: | :---: | :---: | :---: |
+| <img src="docs/screenshots/ar-stage.png" alt="Tampilan panggung AR 3D Harimau Sumatra dengan kartu fakta dan tombol aksi" width="210" /> | <img src="docs/screenshots/scale-compare.png" alt="Harimau Sumatra 3D dengan pembanding tinggi anak 1,2 meter dan fakta saat makan" width="210" /> | <img src="docs/screenshots/info-quiz.png" alt="Panel profil fisik satwa, status konservasi IUCN, dan tantangan kuis 3 soal" width="210" /> | <img src="docs/screenshots/passport.png" alt="Paspor Penjelajah menampilkan pemilik paspor, ringkasan progres, dan koleksi 5 kartu satwa" width="210" /> |
+
 ## Daftar 5 Satwa & Kode Marker QR
 
 | Kode QR | Nama Satwa | Nama Ilmiah | Status Konservasi | Habitat Asli |
