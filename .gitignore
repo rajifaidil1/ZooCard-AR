@@ -9,3 +9,8 @@ local.properties
 *.iml
 .DS_Store
 Thumbs.db
+
+# Local AI agent tooling and working notes
+.agents/
+AGENTS.md
+DESIGN.md
