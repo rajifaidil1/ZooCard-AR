@@ -1,0 +1,4168 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>ZooCard AR: Buku Lapangan Satwa 3D Offline</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 108 108'%3E%3Crect width='108' height='108' rx='24' fill='%230b6b4b'/%3E%3Crect x='37' y='21' width='47' height='56' rx='8' fill='%23fbbf24'/%3E%3Crect x='23' y='28' width='47' height='58' rx='8' fill='%23fffdf7'/%3E%3Cpath d='M39 33l3.2 4.2h8.6l3.2-4.2 1.2 7.2c.2 3.4-3.1 5.8-8.7 5.8s-8.9-2.4-8.7-5.8z' fill='%230b6b4b'/%3E%3Cpath d='M33 50h27v6L43 70h17v6H33v-6l17-14H33z' fill='%2316261e'/%3E%3C/svg%3E" />
+
+  <script defer src="./vendor/jsQR.min.js"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three/three.module.js",
+        "three/addons/": "./vendor/three/"
+      }
+    }
+  </script>
+
+  <style>
+    :root {
+      --paper: #fffdf7;
+      --parchment: #f3efe6;
+      --ink: #16261e;
+      --ink-muted: #42594d;
+      --forest: #0b6b4b;
+      --forest-dark: #085239;
+      --forest-soft: #e3f3ec;
+      --ochre: #fbbf24;
+      --ochre-soft: #fef3c7;
+      --ochre-card: #fffbeb;
+      --ochre-text: #92400e;
+      --ochre-border: #d97706;
+      --cr-bg: #ffe4e6;
+      --cr-ink: #9f1239;
+      --nt-bg: #e0f2fe;
+      --nt-ink: #075985;
+      --ok-bg: #d1fae5;
+      --ok-ink: #065f46;
+      --hud-dark: rgba(20, 34, 27, 0.88);
+      --hud-border: rgba(255, 253, 247, 0.22);
+      --line: #d6cfc0;
+      --line-strong: #788a7f;
+      --focus: #b45309;
+      --focus-dark: #fbbf24;
+      --hud-shadow: 0 6px 20px rgba(10, 22, 16, 0.26);
+      --safe-top: env(safe-area-inset-top, 10px);
+      --safe-bottom: env(safe-area-inset-bottom, 12px);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100dvh;
+      overflow: hidden;
+      background: #0a130e;
+      color: var(--ink);
+      font-family: 'Plus Jakarta Sans', 'Segoe UI', Roboto, system-ui, -apple-system, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a[href], button, summary, select, label[for], [role="button"], [role="tab"] {
+      cursor: pointer;
+    }
+
+    :disabled, [aria-disabled="true"] {
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    :focus-visible {
+      outline: 2.5px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    button {
+      font: inherit;
+      color: inherit;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    /* Live camera, subtle gradient scrim, and transparent 3D layer */
+    #cam-video {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 1;
+      background: #0a130e;
+    }
+
+    #scan-canvas {
+      display: none;
+    }
+
+    #cam-scrim {
+      position: fixed;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+      background: linear-gradient(
+        180deg,
+        rgba(10, 19, 14, 0.44) 0%,
+        rgba(10, 19, 14, 0) 22%,
+        rgba(10, 19, 14, 0) 60%,
+        rgba(10, 19, 14, 0.62) 100%
+      );
+      opacity: 0;
+      transition: opacity 0.22s ease;
+    }
+
+    #cam-scrim.on {
+      opacity: 1;
+    }
+
+    #webgl-layer {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 3;
+      pointer-events: none;
+      touch-action: none;
+    }
+
+    #webgl-layer.active {
+      pointer-events: auto;
+    }
+
+    /* Unified single-row top bar */
+    .top-bar {
+      position: fixed;
+      top: calc(10px + var(--safe-top));
+      left: 12px;
+      right: 12px;
+      z-index: 16;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      max-width: 680px;
+      margin: 0 auto;
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    .top-bar > * {
+      pointer-events: auto;
+    }
+
+    body.focus-mode .top-bar {
+      opacity: 0;
+      transform: translateY(-16px);
+      pointer-events: none;
+    }
+
+    body.focus-mode .top-bar > * {
+      pointer-events: none;
+    }
+
+    .brand-bar {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 44px;
+      min-width: 0;
+      padding: 4px 13px 4px 6px;
+      border-radius: 999px;
+      background: var(--paper);
+      border: 1px solid rgba(22, 38, 30, 0.14);
+      box-shadow: var(--hud-shadow);
+    }
+
+    .brand-mark {
+      width: 32px;
+      height: 32px;
+      border-radius: 9px;
+      overflow: hidden;
+      flex-shrink: 0;
+      display: block;
+    }
+
+    .status-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--ochre-border);
+      flex-shrink: 0;
+    }
+
+    .status-dot.ready {
+      background: var(--forest);
+    }
+
+    .brand-title {
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      color: var(--ink);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Active AR animal identity replaces scanner chip in the same top slot */
+    .ar-identity {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      flex: 1;
+    }
+
+    body.ar-active .brand-bar {
+      display: none;
+    }
+
+    body.ar-active .ar-identity {
+      display: flex;
+    }
+
+    .animal-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 44px;
+      min-width: 0;
+      flex: 1;
+      overflow: hidden;
+      padding: 5px 10px 5px 6px;
+      border-radius: 14px;
+      background: var(--paper);
+      border: 1px solid rgba(22, 38, 30, 0.14);
+      box-shadow: var(--hud-shadow);
+    }
+
+    .stamp-thumb {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      background: var(--forest-soft);
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+    }
+
+    .stamp-thumb svg {
+      width: 28px;
+      height: 28px;
+      display: block;
+    }
+
+    .animal-meta {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .animal-name-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .animal-name {
+      font-size: 14px;
+      font-weight: 800;
+      line-height: 1.18;
+      color: var(--ink);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .demo-tag {
+      font-size: 10.5px;
+      font-weight: 800;
+      padding: 2px 6px;
+      border-radius: 6px;
+      background: var(--ochre-soft);
+      color: var(--ochre-text);
+      flex-shrink: 0;
+    }
+
+    .animal-subline {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 2px;
+      min-width: 0;
+    }
+
+    .animal-sci {
+      font-size: 11px;
+      font-style: italic;
+      font-weight: 600;
+      color: var(--ink-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .iucn-tag {
+      padding: 2px 7px;
+      border-radius: 8px;
+      font-size: 10.5px;
+      font-weight: 800;
+      flex-shrink: 0;
+      background: var(--cr-bg);
+      color: var(--cr-ink);
+    }
+
+    .iucn-tag.vu {
+      background: var(--ochre-soft);
+      color: var(--ochre-text);
+    }
+
+    .iucn-tag.nt {
+      background: var(--nt-bg);
+      color: var(--nt-ink);
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .top-btn {
+      height: 44px;
+      min-width: 44px;
+      padding: 0 11px;
+      border-radius: 14px;
+      border: 1px solid rgba(22, 38, 30, 0.14);
+      background: var(--paper);
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      box-shadow: var(--hud-shadow);
+      transition: transform 0.12s ease, background-color 0.15s ease;
+    }
+
+    .top-btn.icon-only {
+      padding: 0;
+      width: 44px;
+    }
+
+    .top-btn:hover {
+      background: var(--parchment);
+    }
+
+    .top-btn:active {
+      transform: scale(0.95);
+    }
+
+    .top-btn[aria-pressed="true"] {
+      background: var(--forest);
+      color: #ffffff;
+      border-color: var(--forest-dark);
+    }
+
+    .top-btn svg {
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+
+    #btn-focus {
+      display: none;
+    }
+
+    body.ar-active #btn-focus {
+      display: inline-flex;
+    }
+
+    body.ar-active #btn-settings {
+      display: none;
+    }
+
+    @media (max-width: 479px) {
+      body.ar-active #btn-passport {
+        display: none;
+      }
+
+      body.ar-active .animal-sci {
+        display: none;
+      }
+    }
+
+    @media (max-width: 369px) {
+      body.ar-active .animal-pill .stamp-thumb {
+        display: none;
+      }
+
+      body.ar-active .animal-pill {
+        padding-left: 10px;
+      }
+    }
+
+    /* Toast notification reserved in overlay layer (zero layout shift) */
+    #toast-banner {
+      position: fixed;
+      top: calc(64px + var(--safe-top));
+      left: 50%;
+      transform: translateX(-50%) translateY(-10px);
+      z-index: 26;
+      pointer-events: none;
+      opacity: 0;
+      max-width: min(90vw, 440px);
+      background: var(--ochre);
+      color: var(--ink);
+      border: 1px solid rgba(22, 38, 30, 0.22);
+      padding: 9px 16px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 800;
+      text-align: center;
+      box-shadow: var(--hud-shadow);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    #toast-banner.dark {
+      background: var(--hud-dark);
+      color: var(--paper);
+      border-color: var(--hud-border);
+    }
+
+    #toast-banner.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* Calm scanner viewfinder and first-time demo trigger */
+    #scanner-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 8;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: calc(74px + var(--safe-top)) 16px calc(24px + var(--safe-bottom));
+      transition: opacity 0.22s ease;
+    }
+
+    #scanner-overlay.hidden {
+      opacity: 0;
+      visibility: hidden;
+    }
+
+    .scan-box {
+      width: min(62vw, 244px);
+      height: min(62vw, 244px);
+      position: relative;
+      border-radius: 24px;
+      box-shadow: 0 0 0 9999px rgba(10, 19, 14, 0.24);
+    }
+
+    .sc-corner {
+      position: absolute;
+      width: 32px;
+      height: 32px;
+      border: 4px solid var(--paper);
+    }
+
+    .sc-tl { top: -2px; left: -2px; border-right: none; border-bottom: none; border-radius: 20px 0 0 0; }
+    .sc-tr { top: -2px; right: -2px; border-left: none; border-bottom: none; border-radius: 0 20px 0 0; }
+    .sc-bl { bottom: -2px; left: -2px; border-right: none; border-top: none; border-radius: 0 0 0 20px; }
+    .sc-br { bottom: -2px; right: -2px; border-left: none; border-top: none; border-radius: 0 0 20px 0; }
+
+    .scan-caption {
+      background: var(--paper);
+      color: var(--ink);
+      border: 1px solid rgba(22, 38, 30, 0.12);
+      padding: 10px 18px;
+      border-radius: 999px;
+      font-size: 13.5px;
+      font-weight: 700;
+      text-align: center;
+      box-shadow: var(--hud-shadow);
+      max-width: min(88vw, 360px);
+    }
+
+    .demo-cta {
+      pointer-events: auto;
+      min-height: 44px;
+      padding: 10px 18px;
+      border-radius: 14px;
+      border: 1px solid var(--hud-border);
+      background: var(--hud-dark);
+      color: var(--paper);
+      font-size: 13px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: var(--hud-shadow);
+      backdrop-filter: blur(8px);
+      transition: transform 0.12s ease, background-color 0.15s ease;
+    }
+
+    .demo-cta:hover {
+      background: #102018;
+    }
+
+    .demo-cta:active {
+      transform: scale(0.96);
+    }
+
+    .demo-cta:focus-visible {
+      outline-color: var(--focus-dark);
+    }
+
+    /* Loading and error states over 3D canvas */
+    .stage-state {
+      position: fixed;
+      top: 44%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 14;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      width: min(86vw, 310px);
+      padding: 16px 18px;
+      border-radius: 18px;
+      background: var(--paper);
+      color: var(--ink);
+      border: 1px solid var(--line);
+      box-shadow: var(--hud-shadow);
+      text-align: center;
+    }
+
+    .stage-state.show {
+      display: flex;
+    }
+
+    .spinner {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 3px solid var(--line);
+      border-top-color: var(--forest);
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .state-title {
+      font-size: 14.5px;
+      font-weight: 800;
+      color: var(--ink);
+    }
+
+    .state-desc {
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--ink-muted);
+    }
+
+    .state-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    /* Bottom AR HUD dock */
+    #ar-hud {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 12;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0 12px calc(12px + var(--safe-bottom));
+      opacity: 0;
+      transform: translateY(18px);
+      transition: opacity 0.22s ease, transform 0.22s ease;
+    }
+
+    #ar-hud.active {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    #ar-hud.active .interactive {
+      pointer-events: auto;
+    }
+
+    body.focus-mode #ar-hud {
+      opacity: 0;
+      transform: translateY(20px);
+      pointer-events: none;
+    }
+
+    body.focus-mode #ar-hud .interactive {
+      pointer-events: none;
+    }
+
+    .hud-inner {
+      width: min(560px, 100%);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* Quick 3D interactive tool rail (glass accent limited to this live-camera bar) */
+    .tool-rail {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 2px 0;
+      scrollbar-width: none;
+    }
+
+    .tool-rail::-webkit-scrollbar {
+      display: none;
+    }
+
+    .rail-btn {
+      min-height: 44px;
+      padding: 0 13px;
+      border-radius: 999px;
+      border: 1px solid var(--hud-border);
+      background: var(--hud-dark);
+      color: var(--paper);
+      backdrop-filter: blur(8px);
+      font-size: 12.5px;
+      font-weight: 700;
+      white-space: nowrap;
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: transform 0.12s ease, background-color 0.15s ease;
+    }
+
+    .rail-btn svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+
+    .rail-btn:hover {
+      background: #102018;
+    }
+
+    .rail-btn:active {
+      transform: scale(0.96);
+    }
+
+    .rail-btn:focus-visible {
+      outline-color: var(--focus-dark);
+    }
+
+    .rail-btn.accent {
+      background: var(--ochre);
+      color: var(--ink);
+      border-color: rgba(22, 38, 30, 0.25);
+    }
+
+    .rail-btn.accent:hover {
+      background: #f59e0b;
+    }
+
+    .rail-btn[aria-pressed="true"] {
+      background: var(--forest);
+      color: #ffffff;
+      border-color: #34d399;
+    }
+
+    /* Field-journal fact card */
+    .fact-card {
+      background: var(--paper);
+      color: var(--ink);
+      border-radius: 18px;
+      border: 1px solid rgba(22, 38, 30, 0.14);
+      padding: 12px 14px 10px;
+      box-shadow: var(--hud-shadow);
+    }
+
+    .fact-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .fact-badge {
+      font-size: 11.5px;
+      font-weight: 800;
+      color: var(--forest-dark);
+      background: var(--forest-soft);
+      padding: 3px 9px;
+      border-radius: 8px;
+    }
+
+    .fact-badge.feed {
+      background: var(--ochre-soft);
+      color: var(--ochre-text);
+    }
+
+    .fact-top-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .dots-row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .f-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #cbd2c9;
+      transition: width 0.2s ease, background-color 0.2s ease;
+    }
+
+    .f-dot.on {
+      width: 18px;
+      border-radius: 99px;
+      background: var(--forest);
+    }
+
+    .fact-text {
+      font-size: clamp(13.5px, 3.6vw, 15px);
+      font-weight: 600;
+      line-height: 1.48;
+      color: var(--ink);
+      min-height: 44px;
+    }
+
+    .fact-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--parchment);
+    }
+
+    .fact-nav-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .mini-ctrl {
+      min-height: 44px;
+      min-width: 44px;
+      padding: 0 11px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: var(--parchment);
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      transition: background-color 0.15s ease, transform 0.12s ease;
+    }
+
+    .mini-ctrl svg {
+      width: 15px;
+      height: 15px;
+    }
+
+    .mini-ctrl:hover {
+      background: #e7e1d4;
+    }
+
+    .mini-ctrl:active {
+      transform: scale(0.96);
+    }
+
+    .mini-ctrl.speaking {
+      background: var(--forest-soft);
+      border-color: var(--forest);
+      color: var(--forest-dark);
+    }
+
+    /* 4 primary bottom dock controls */
+    .action-dock {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .dock-btn {
+      min-height: 56px;
+      border: 1px solid rgba(22, 38, 30, 0.14);
+      border-radius: 14px;
+      padding: 8px 4px;
+      background: var(--paper);
+      color: var(--ink);
+      box-shadow: var(--hud-shadow);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      font-size: 11.5px;
+      font-weight: 800;
+      transition: transform 0.12s ease, background-color 0.15s ease;
+    }
+
+    .dock-btn svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .dock-btn:hover {
+      background: var(--parchment);
+    }
+
+    .dock-btn:active {
+      transform: scale(0.95);
+    }
+
+    .dock-btn.primary {
+      background: var(--forest);
+      color: #ffffff;
+      border-color: var(--forest-dark);
+    }
+
+    .dock-btn.primary:hover {
+      background: var(--forest-dark);
+    }
+
+    .dock-btn.playing {
+      background: var(--ochre-soft);
+      border-color: var(--ochre-border);
+      color: var(--ochre-text);
+    }
+
+    /* Focus mode restore bar */
+    #focus-restore {
+      position: fixed;
+      left: 50%;
+      bottom: calc(16px + var(--safe-bottom));
+      transform: translateX(-50%);
+      z-index: 15;
+      display: none;
+      align-items: center;
+      gap: 10px;
+    }
+
+    body.focus-mode #focus-restore {
+      display: flex;
+    }
+
+    /* Bottom sheet modals (mobile) -> centered dialogs (tablet/desktop) */
+    .modal-bg {
+      position: fixed;
+      inset: 0;
+      z-index: 32;
+      background: rgba(10, 19, 14, 0.64);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 12px 0 0;
+    }
+
+    .modal-bg.open {
+      display: flex;
+    }
+
+    .sheet-card {
+      width: min(560px, 100%);
+      max-height: 88dvh;
+      overflow-y: auto;
+      background: var(--paper);
+      color: var(--ink);
+      border-radius: 24px 24px 0 0;
+      border-top: 1px solid var(--line);
+      padding: 12px 18px calc(22px + var(--safe-bottom));
+      animation: sheetIn 0.2s ease-out;
+    }
+
+    @keyframes sheetIn {
+      from { transform: translateY(24px); opacity: 0.7; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .sheet-handle {
+      width: 40px;
+      height: 4px;
+      border-radius: 99px;
+      background: var(--line);
+      margin: 0 auto 12px;
+    }
+
+    .sheet-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .sheet-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .sheet-head h2 {
+      font-size: clamp(17px, 4.4vw, 20px);
+      font-weight: 800;
+      line-height: 1.2;
+      color: var(--ink);
+    }
+
+    .close-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: var(--parchment);
+      color: var(--ink);
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+    }
+
+    .close-btn:hover {
+      background: #e5dfd1;
+    }
+
+    .close-btn svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    /* Bio & Quiz sheet content */
+    .status-note {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: var(--parchment);
+      border: 1px solid var(--line);
+      margin-bottom: 12px;
+      font-size: 12.5px;
+      line-height: 1.4;
+      color: var(--ink-muted);
+    }
+
+    .quick-chips {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .q-chip {
+      background: var(--parchment);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 10px 12px;
+    }
+
+    .q-chip small {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--ink-muted);
+      margin-bottom: 3px;
+    }
+
+    .q-chip strong {
+      font-size: 13.5px;
+      color: var(--ink);
+      line-height: 1.3;
+    }
+
+    .stat-box {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 13px 14px;
+      margin-bottom: 14px;
+    }
+
+    .stat-box h3,
+    .quiz-card h3 {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--ink);
+      margin-bottom: 10px;
+    }
+
+    .stat-row {
+      margin-bottom: 11px;
+    }
+
+    .stat-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .stat-lbl {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 12.5px;
+      font-weight: 700;
+      margin-bottom: 5px;
+    }
+
+    .stat-lbl span:last-child {
+      color: var(--ink-muted);
+    }
+
+    .bar-track {
+      height: 10px;
+      background: var(--parchment);
+      border: 1px solid var(--line);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 99px;
+      background: var(--forest);
+      transition: width 0.35s ease;
+    }
+
+    .bar-fill.ochre {
+      background: var(--ochre-border);
+    }
+
+    .bar-fill.sky {
+      background: var(--nt-ink);
+    }
+
+    .scale-note {
+      margin-top: 10px;
+      padding-top: 9px;
+      border-top: 1px solid var(--parchment);
+      font-size: 12.5px;
+      color: var(--ink-muted);
+      font-weight: 600;
+    }
+
+    .quiz-card {
+      background: var(--ochre-card);
+      border: 1.5px solid var(--ochre-border);
+      border-radius: 16px;
+      padding: 14px;
+    }
+
+    .quiz-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .quiz-kicker {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--ochre-text);
+    }
+
+    .quiz-score-pill {
+      font-size: 11.5px;
+      font-weight: 800;
+      color: var(--ok-ink);
+      background: var(--ok-bg);
+      padding: 3px 8px;
+      border-radius: 8px;
+    }
+
+    .quiz-q {
+      font-size: 14.5px;
+      font-weight: 800;
+      margin: 6px 0 11px;
+      line-height: 1.42;
+      color: var(--ink);
+    }
+
+    .quiz-opts {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .quiz-opt {
+      width: 100%;
+      min-height: 44px;
+      text-align: left;
+      padding: 10px 13px;
+      border-radius: 12px;
+      border: 1.5px solid var(--line-strong);
+      background: var(--paper);
+      color: var(--ink);
+      font-size: 13.5px;
+      font-weight: 700;
+      line-height: 1.35;
+      transition: background-color 0.14s ease, border-color 0.14s ease;
+    }
+
+    .quiz-opt:hover:not(:disabled) {
+      background: var(--parchment);
+    }
+
+    .quiz-opt.ok {
+      background: var(--ok-bg);
+      border-color: var(--ok-ink);
+      color: var(--ok-ink);
+      opacity: 1;
+    }
+
+    .quiz-opt.no {
+      background: var(--cr-bg);
+      border-color: var(--cr-ink);
+      color: var(--cr-ink);
+      opacity: 1;
+    }
+
+    .quiz-fb {
+      margin-top: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.45;
+      color: var(--ok-ink);
+    }
+
+    .quiz-fb.wrong {
+      color: var(--cr-ink);
+    }
+
+    .quiz-next-row {
+      margin-top: 10px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    /* Buttons shared across sheets */
+    .btn-primary,
+    .btn-secondary,
+    .btn-danger {
+      min-height: 44px;
+      padding: 10px 16px;
+      border-radius: 12px;
+      font-size: 13.5px;
+      font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      border: 1px solid transparent;
+      transition: background-color 0.15s ease, transform 0.12s ease;
+    }
+
+    .btn-primary {
+      background: var(--forest);
+      color: #ffffff;
+      border-color: var(--forest-dark);
+    }
+
+    .btn-primary:hover {
+      background: var(--forest-dark);
+    }
+
+    .btn-secondary {
+      background: var(--parchment);
+      color: var(--ink);
+      border-color: var(--line-strong);
+    }
+
+    .btn-secondary:hover {
+      background: #e5dfd1;
+    }
+
+    .btn-danger {
+      background: var(--cr-bg);
+      color: var(--cr-ink);
+      border-color: var(--cr-ink);
+    }
+
+    .btn-primary:active,
+    .btn-secondary:active,
+    .btn-danger:active {
+      transform: scale(0.97);
+    }
+
+    /* Passport tabs & collection cards */
+    .tab-bar {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+      padding: 4px;
+      border-radius: 14px;
+      background: var(--parchment);
+      border: 1px solid var(--line);
+      margin-bottom: 14px;
+    }
+
+    .tab-btn {
+      min-height: 44px;
+      border: none;
+      border-radius: 10px;
+      background: transparent;
+      color: var(--ink-muted);
+      font-size: 13px;
+      font-weight: 800;
+      transition: background-color 0.15s ease, color 0.15s ease;
+    }
+
+    .tab-btn[aria-selected="true"] {
+      background: var(--paper);
+      color: var(--ink);
+      box-shadow: 0 2px 6px rgba(22, 38, 30, 0.1);
+    }
+
+    .summary-strip {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .sum-item {
+      background: var(--parchment);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 9px 8px;
+      text-align: center;
+    }
+
+    .sum-item strong {
+      display: block;
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--ink);
+    }
+
+    .sum-item span {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--ink-muted);
+    }
+
+    .empty-box {
+      background: var(--parchment);
+      border: 1px dashed var(--line-strong);
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 12px;
+      text-align: center;
+    }
+
+    .empty-box p {
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--ink-muted);
+      margin-bottom: 10px;
+    }
+
+    .album-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .album-card {
+      text-align: left;
+      border-radius: 16px;
+      padding: 12px;
+      border: 1.5px dashed var(--line-strong);
+      background: var(--parchment);
+      color: var(--ink);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.12s ease;
+    }
+
+    .album-card:active {
+      transform: scale(0.98);
+    }
+
+    .album-card.unlocked {
+      border-style: solid;
+      border-color: var(--forest);
+      background: var(--forest-soft);
+    }
+
+    .album-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .album-stamp {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      display: grid;
+      place-items: center;
+    }
+
+    .album-card:not(.unlocked) .album-stamp svg {
+      filter: grayscale(1);
+      opacity: 0.45;
+    }
+
+    .specimen-code {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--ink-muted);
+      background: var(--paper);
+      padding: 3px 7px;
+      border-radius: 7px;
+      border: 1px solid var(--line);
+    }
+
+    .album-name {
+      font-size: 13.5px;
+      font-weight: 800;
+      color: var(--ink);
+      line-height: 1.25;
+    }
+
+    .album-sub {
+      font-size: 11.5px;
+      color: var(--ink-muted);
+      font-weight: 600;
+    }
+
+    .stamp-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: auto;
+    }
+
+    .mini-stamp {
+      font-size: 10.5px;
+      font-weight: 800;
+      padding: 2px 6px;
+      border-radius: 6px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      color: var(--ink-muted);
+    }
+
+    .mini-stamp.done {
+      background: var(--forest);
+      border-color: var(--forest-dark);
+      color: #ffffff;
+    }
+
+    /* Compare panel */
+    .compare-selects {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .field-group label {
+      display: block;
+      font-size: 11.5px;
+      font-weight: 800;
+      color: var(--ink-muted);
+      margin-bottom: 5px;
+    }
+
+    .field-group select {
+      width: 100%;
+      min-height: 44px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      border: 1.5px solid var(--line-strong);
+      background: var(--paper);
+      color: var(--ink);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .compare-metric {
+      background: var(--parchment);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 11px 12px;
+      margin-bottom: 10px;
+    }
+
+    .compare-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .compare-head strong {
+      font-size: 13px;
+      color: var(--ink);
+    }
+
+    .compare-winner {
+      font-size: 11.5px;
+      font-weight: 800;
+      color: var(--forest-dark);
+    }
+
+    .cmp-row {
+      display: grid;
+      grid-template-columns: 78px 1fr auto;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .cmp-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .cmp-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--ink-muted);
+    }
+
+    .compare-facts {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .cmp-info-card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .cmp-info-card strong {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+
+    /* Photo preview modal */
+    .photo-frame {
+      width: 100%;
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      background: var(--parchment);
+      margin-bottom: 12px;
+    }
+
+    .photo-frame img {
+      display: block;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 3 / 4;
+      object-fit: contain;
+    }
+
+    .photo-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    #photo-status {
+      margin-top: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--ok-ink);
+      text-align: center;
+    }
+
+    /* Settings sheet */
+    .set-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 13px;
+      border-radius: 14px;
+      background: var(--parchment);
+      border: 1px solid var(--line);
+      margin-bottom: 9px;
+    }
+
+    .set-copy strong {
+      display: block;
+      font-size: 13.5px;
+      color: var(--ink);
+      margin-bottom: 2px;
+    }
+
+    .set-copy small {
+      display: block;
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--ink-muted);
+    }
+
+    .set-copy small.ok {
+      color: var(--ok-ink);
+      font-weight: 700;
+    }
+
+    .toggle-btn {
+      min-width: 74px;
+      min-height: 44px;
+      padding: 0 12px;
+      border-radius: 10px;
+      border: 1.5px solid var(--line-strong);
+      background: var(--paper);
+      color: var(--ink);
+      font-size: 12.5px;
+      font-weight: 800;
+      flex-shrink: 0;
+    }
+
+    .toggle-btn[aria-pressed="true"] {
+      background: var(--forest);
+      border-color: var(--forest-dark);
+      color: #ffffff;
+    }
+
+    .reset-confirm {
+      display: none;
+      margin-top: 8px;
+      padding: 11px 12px;
+      border-radius: 12px;
+      background: var(--cr-bg);
+      border: 1px solid var(--cr-ink);
+      color: var(--cr-ink);
+      font-size: 12.5px;
+      font-weight: 700;
+    }
+
+    .reset-confirm.show {
+      display: block;
+    }
+
+    .reset-confirm-btns {
+      display: flex;
+      gap: 8px;
+      margin-top: 9px;
+    }
+
+    .credits {
+      font-size: 11.5px;
+      color: var(--ink-muted);
+      margin-top: 12px;
+      line-height: 1.5;
+    }
+
+    /* Launch splash screen (seamless handoff from native launch_splash.xml) */
+    #app-splash {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      background: var(--forest);
+      color: var(--paper);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      padding: 24px;
+      text-align: center;
+      transition: opacity 0.28s ease, visibility 0.28s ease;
+    }
+
+    #app-splash.done {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .splash-logo {
+      width: 96px;
+      height: 96px;
+      border-radius: 24px;
+      overflow: hidden;
+      box-shadow: 0 12px 30px rgba(8, 28, 19, 0.34);
+      animation: logoPop 0.38s ease-out;
+    }
+
+    @keyframes logoPop {
+      from { transform: scale(0.9); opacity: 0.7; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    .splash-title {
+      font-size: clamp(22px, 6vw, 26px);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: var(--paper);
+    }
+
+    .splash-sub {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--forest-soft);
+      margin-top: -8px;
+    }
+
+    .splash-bar-wrap {
+      width: min(210px, 62vw);
+      height: 6px;
+      border-radius: 99px;
+      background: rgba(8, 36, 25, 0.45);
+      overflow: hidden;
+      margin-top: 6px;
+    }
+
+    .splash-bar-fill {
+      height: 100%;
+      width: 18%;
+      border-radius: 99px;
+      background: var(--ochre);
+      transition: width 0.35s ease-out;
+    }
+
+    .splash-status {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--forest-soft);
+      min-height: 18px;
+    }
+
+    /* Optional local Explorer Name card & Passport owner banner */
+    .welcome-lead {
+      font-size: 13.5px;
+      line-height: 1.5;
+      color: var(--ink-muted);
+      margin-bottom: 14px;
+    }
+
+    .text-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+
+    .text-field label {
+      font-size: 12.5px;
+      font-weight: 800;
+      color: var(--ink);
+    }
+
+    .text-field input {
+      width: 100%;
+      min-height: 48px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1.5px solid var(--line-strong);
+      background: var(--paper);
+      color: var(--ink);
+      font: inherit;
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .text-field input::placeholder {
+      color: #566b60;
+      font-weight: 600;
+    }
+
+    .welcome-actions {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+    }
+
+    .welcome-note {
+      margin-top: 12px;
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--ink-muted);
+    }
+
+    .owner-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: var(--forest-soft);
+      border: 1px solid var(--forest);
+      margin-bottom: 12px;
+    }
+
+    .owner-copy small {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--forest-dark);
+    }
+
+    .owner-copy strong {
+      display: block;
+      font-size: 14.5px;
+      font-weight: 800;
+      color: var(--ink);
+    }
+
+    /* Camera error fallback screen */
+    #cam-error {
+      position: fixed;
+      inset: 0;
+      z-index: 24;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 28px 20px;
+      text-align: center;
+      background: var(--paper);
+      color: var(--ink);
+    }
+
+    #cam-error.show {
+      display: flex;
+    }
+
+    .cam-err-icon {
+      width: 60px;
+      height: 60px;
+      border-radius: 16px;
+      background: var(--parchment);
+      border: 1px solid var(--line);
+      display: grid;
+      place-items: center;
+      color: var(--forest);
+    }
+
+    #cam-error h2 {
+      font-size: 20px;
+      font-weight: 800;
+    }
+
+    #cam-error p {
+      font-size: 14px;
+      color: var(--ink-muted);
+      max-width: 330px;
+      line-height: 1.5;
+    }
+
+    /* Responsive breakpoints: narrow phones (<350px) and tablets (>=680px) */
+    @media (max-width: 349px) {
+      .album-grid,
+      .quick-chips,
+      .compare-selects,
+      .compare-facts,
+      .photo-actions {
+        grid-template-columns: 1fr;
+      }
+
+      .dock-btn {
+        font-size: 10.5px;
+      }
+    }
+
+    @media (min-width: 680px) {
+      .modal-bg {
+        align-items: center;
+        padding: 20px;
+      }
+
+      .sheet-card {
+        border-radius: 24px;
+        border: 1px solid var(--line);
+        padding: 18px 22px 22px;
+      }
+
+      .sheet-handle {
+        display: none;
+      }
+
+      .album-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app-splash" role="status" aria-live="polite">
+    <div class="splash-logo" aria-hidden="true">
+      <svg viewBox="0 0 108 108" width="96" height="96">
+        <rect width="108" height="108" fill="#0B6B4B"/>
+        <path d="M0,74L108,40L108,108L0,108z" fill="#085239"/>
+        <rect x="37" y="21" width="47" height="56" rx="8" fill="#FBBF24"/>
+        <rect x="23" y="28" width="47" height="58" rx="8" fill="#FFFDF7"/>
+        <path d="M27,39v-6h6v2.2h-3.8v3.8zM66,75v6h-6v-2.2h3.8v-3.8z" fill="#0B6B4B"/>
+        <path d="M39,33l3.2,4.2h8.6l3.2,-4.2l1.2,7.2c0.2,3.4 -3.1,5.8 -8.7,5.8s-8.9,-2.4 -8.7,-5.8z" fill="#0B6B4B"/>
+        <circle cx="43.2" cy="40" r="1.2" fill="#FFFDF7"/>
+        <circle cx="49.8" cy="40" r="1.2" fill="#FFFDF7"/>
+        <path d="M33,50h27v6L43,70H60V76H33v-6L50,56H33z" fill="#16261E"/>
+        <rect x="33" y="79.5" width="14" height="2.8" fill="#D97706"/>
+      </svg>
+    </div>
+    <div class="splash-title">ZooCard AR</div>
+    <div class="splash-sub">Buku Lapangan Satwa 3D</div>
+    <div class="splash-bar-wrap" aria-hidden="true">
+      <div id="splash-bar-fill" class="splash-bar-fill"></div>
+    </div>
+    <div id="splash-status" class="splash-status">Menyiapkan kamera dan aset 3D lokal...</div>
+  </div>
+
+  <video id="cam-video" width="640" height="480" autoplay playsinline muted></video>
+  <canvas id="scan-canvas" width="280" height="210"></canvas>
+  <div id="cam-scrim" aria-hidden="true"></div>
+  <div id="webgl-layer" tabindex="0" aria-label="Area model satwa 3D. Geser untuk memutar, cubit untuk memperbesar, atau gunakan tombol panah kiri dan kanan."></div>
+
+  <header class="top-bar">
+    <div class="brand-bar">
+      <svg class="brand-mark" viewBox="0 0 108 108" aria-hidden="true">
+        <rect width="108" height="108" fill="#0B6B4B"/>
+        <path d="M0,74L108,40L108,108L0,108z" fill="#085239"/>
+        <rect x="37" y="21" width="47" height="56" rx="8" fill="#FBBF24"/>
+        <rect x="23" y="28" width="47" height="58" rx="8" fill="#FFFDF7"/>
+        <path d="M39,33l3.2,4.2h8.6l3.2,-4.2l1.2,7.2c0.2,3.4 -3.1,5.8 -8.7,5.8s-8.9,-2.4 -8.7,-5.8z" fill="#0B6B4B"/>
+        <path d="M33,50h27v6L43,70H60V76H33v-6L50,56H33z" fill="#16261E"/>
+      </svg>
+      <span id="status-dot" class="status-dot" aria-hidden="true"></span>
+      <h1 class="brand-title">ZooCard AR</h1>
+    </div>
+
+    <div class="ar-identity">
+      <button id="btn-back-scan" type="button" class="top-btn icon-only" aria-label="Kembali ke pemindai kartu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <div class="animal-pill">
+        <div id="h-stamp" class="stamp-thumb" aria-hidden="true"></div>
+        <div class="animal-meta">
+          <div class="animal-name-row">
+            <span id="h-name" class="animal-name">Harimau Sumatra</span>
+            <span id="h-demo" class="demo-tag" hidden>Coba</span>
+          </div>
+          <div class="animal-subline">
+            <span id="h-sci" class="animal-sci">Panthera tigris sumatrae</span>
+            <span id="h-iucn" class="iucn-tag">Kritis (CR)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <button id="btn-focus" type="button" class="top-btn icon-only" aria-label="Sembunyikan panel untuk melihat 3D lebih luas" aria-pressed="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+      </button>
+      <button id="btn-passport" type="button" class="top-btn" aria-label="Buka Paspor Penjelajah">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <span id="col-badge">0/5</span>
+      </button>
+      <button id="btn-mute" type="button" class="top-btn icon-only" aria-label="Matikan suara" aria-pressed="false">
+        <svg id="ico-sound-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+        <svg id="ico-sound-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+      </button>
+      <button id="btn-settings" type="button" class="top-btn icon-only" aria-label="Buka pengaturan">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.85 1 1.51 1H21a2 2 0 1 1 0 4h-.09c-.66 0-1.25.4-1.51 1z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div id="toast-banner" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <main id="stage-main">
+    <section id="scanner-overlay" aria-label="Pemindai Kartu ZooCard AR">
+      <div class="scan-box" aria-hidden="true">
+        <div class="sc-corner sc-tl"></div>
+        <div class="sc-corner sc-tr"></div>
+        <div class="sc-corner sc-bl"></div>
+        <div class="sc-corner sc-br"></div>
+      </div>
+      <p class="scan-caption">Arahkan kamera ke kode QR pada Kartu ZooCard</p>
+      <button id="btn-try-demo" type="button" class="demo-cta">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        <span>Belum pegang kartu? Coba Harimau Sumatra</span>
+      </button>
+    </section>
+
+    <div id="model-loading" class="stage-state" role="status" aria-live="polite">
+      <div class="spinner" aria-hidden="true"></div>
+      <div id="loading-title" class="state-title">Memuat model 3D...</div>
+      <div class="state-desc">Menyiapkan satwa dari penyimpanan lokal tanpa internet.</div>
+    </div>
+
+    <div id="model-error" class="stage-state" role="alert">
+      <div class="state-title">Model 3D gagal dimuat</div>
+      <div id="error-desc" class="state-desc">Berkas 3D lokal tidak dapat dibuka saat ini.</div>
+      <div class="state-actions">
+        <button id="btn-retry-model" type="button" class="btn-primary">Coba Muat Ulang</button>
+        <button id="btn-error-back" type="button" class="btn-secondary">Kembali ke Kamera</button>
+      </div>
+    </div>
+
+    <section id="ar-hud" aria-label="Kontrol dan Fakta Satwa">
+      <div class="hud-inner">
+        <div class="tool-rail interactive" aria-label="Aksi cepat pada model 3D">
+          <button id="btn-feed" type="button" class="rail-btn accent">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2C7 2 4 6 4 11c0 4 3 7 8 11 5-4 8-7 8-11 0-5-3-9-8-9z"/><circle cx="12" cy="10" r="2.5"/></svg>
+            <span id="feed-lbl">Beri Makan</span>
+          </button>
+          <button id="btn-scale" type="button" class="rail-btn" aria-pressed="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h4v16h-4"/><path d="M20 8h-3"/><path d="M20 12h-2"/><path d="M20 16h-3"/><circle cx="8" cy="6" r="2"/><path d="M6 20v-6l-1-3h6l-1 3v6"/></svg>
+            <span>Tinggi 1,2 m</span>
+          </button>
+          <button id="btn-next-anim" type="button" class="rail-btn" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span>Ganti Gerakan</span>
+          </button>
+          <button id="btn-rotate-toggle" type="button" class="rail-btn" aria-pressed="true">
+            <svg id="ico-rot-pause" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+            <svg id="ico-rot-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span id="rot-lbl">Jeda Putar</span>
+          </button>
+          <button id="btn-passport-rail" type="button" class="rail-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            <span>Paspor</span>
+          </button>
+        </div>
+
+        <article id="fact-card" class="fact-card interactive" aria-label="Kartu fakta satwa">
+          <div class="fact-top">
+            <span id="fact-badge" class="fact-badge">Perkenalan</span>
+            <div class="fact-top-right">
+              <div id="fact-dots" class="dots-row" aria-hidden="true"></div>
+            </div>
+          </div>
+          <p id="speech-text" class="fact-text"></p>
+          <div class="fact-footer">
+            <button id="btn-speak-toggle" type="button" class="mini-ctrl" aria-pressed="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+              <span id="speak-lbl">Bacakan</span>
+            </button>
+            <div class="fact-nav-group">
+              <button id="btn-fact-prev" type="button" class="mini-ctrl" aria-label="Fakta sebelumnya">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+              </button>
+              <button id="btn-fact-next" type="button" class="mini-ctrl">
+                <span>Fakta Lain</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+              </button>
+            </div>
+          </div>
+        </article>
+
+        <nav class="action-dock interactive" aria-label="Aksi utama satwa">
+          <button id="btn-sound" type="button" class="dock-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+            <span>Suara</span>
+          </button>
+          <button id="btn-photo" type="button" class="dock-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            <span>Foto AR</span>
+          </button>
+          <button id="btn-bio" type="button" class="dock-btn primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            <span>Info &amp; Kuis</span>
+          </button>
+          <button id="btn-rescan" type="button" class="dock-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
+            <span>Scan Lagi</span>
+          </button>
+        </nav>
+      </div>
+    </section>
+
+    <div id="focus-restore">
+      <button id="btn-photo-focus" type="button" class="rail-btn accent">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        <span>Foto AR</span>
+      </button>
+      <button id="btn-exit-focus" type="button" class="rail-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        <span>Tampilkan Panel</span>
+      </button>
+    </div>
+  </main>
+
+  <!-- Modal: Info & 3-Question Quiz -->
+  <div id="modal-bio" class="modal-bg" role="dialog" aria-modal="true" aria-labelledby="bio-title">
+    <div class="sheet-card">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-head">
+        <div class="sheet-title-wrap">
+          <div id="bio-stamp" class="stamp-thumb" aria-hidden="true"></div>
+          <h2 id="bio-title">Info Satwa</h2>
+        </div>
+        <button type="button" class="close-btn" data-close="modal-bio" aria-label="Tutup panel info satwa">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="status-note">
+        <span id="bio-iucn" class="iucn-tag">Kritis (CR)</span>
+        <span id="bio-iucn-desc"></span>
+      </div>
+
+      <div class="quick-chips">
+        <div class="q-chip">
+          <small>Makanan Utama</small>
+          <strong id="bio-diet"></strong>
+        </div>
+        <div class="q-chip">
+          <small>Habitat Asli</small>
+          <strong id="bio-habitat"></strong>
+        </div>
+      </div>
+
+      <div class="stat-box">
+        <h3>Profil Fisik Satwa</h3>
+        <div class="stat-row">
+          <div class="stat-lbl"><span>Kecepatan Gerak</span><span id="st-speed-val"></span></div>
+          <div class="bar-track"><div id="st-speed-bar" class="bar-fill ochre" style="width:0%"></div></div>
+        </div>
+        <div class="stat-row">
+          <div class="stat-lbl"><span>Ukuran Tubuh</span><span id="st-size-val"></span></div>
+          <div class="bar-track"><div id="st-size-bar" class="bar-fill" style="width:0%"></div></div>
+        </div>
+        <div class="stat-row">
+          <div class="stat-lbl"><span>Berat Maksimal</span><span id="st-weight-val"></span></div>
+          <div class="bar-track"><div id="st-weight-bar" class="bar-fill sky" style="width:0%"></div></div>
+        </div>
+        <p id="bio-scale-note" class="scale-note"></p>
+      </div>
+
+      <div class="quiz-card">
+        <div class="quiz-meta">
+          <span id="quiz-progress" class="quiz-kicker">Tantangan Kilat (Soal 1 dari 3)</span>
+          <span id="quiz-star-badge" class="quiz-score-pill" hidden>Stempel Kuis Lulus</span>
+        </div>
+        <div id="quiz-q" class="quiz-q"></div>
+        <div id="quiz-opts" class="quiz-opts"></div>
+        <div id="quiz-fb" class="quiz-fb" aria-live="polite"></div>
+        <div class="quiz-next-row">
+          <button id="btn-quiz-next" type="button" class="btn-primary" hidden>Soal Berikutnya</button>
+          <button id="btn-quiz-retry" type="button" class="btn-secondary" hidden>Ulangi Kuis</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Explorer Passport (Collection + Compare 2 Animals) -->
+  <div id="modal-passport" class="modal-bg" role="dialog" aria-modal="true" aria-labelledby="passport-title">
+    <div class="sheet-card">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-head">
+        <h2 id="passport-title">Paspor Penjelajah</h2>
+        <button type="button" class="close-btn" data-close="modal-passport" aria-label="Tutup Paspor Penjelajah">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="tab-bar" role="tablist" aria-label="Bagian Paspor Penjelajah">
+        <button id="tab-koleksi" type="button" class="tab-btn" role="tab" aria-selected="true" aria-controls="panel-koleksi">Koleksi Kartu</button>
+        <button id="tab-bandingkan" type="button" class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-bandingkan" tabindex="-1">Bandingkan 2 Satwa</button>
+      </div>
+
+      <div id="panel-koleksi" role="tabpanel" aria-labelledby="tab-koleksi">
+        <div class="owner-bar">
+          <div class="owner-copy">
+            <small>Pemilik Paspor</small>
+            <strong id="passport-owner-name">Penjelajah</strong>
+          </div>
+          <button id="btn-edit-name-passport" type="button" class="btn-secondary">Ubah Nama</button>
+        </div>
+        <div class="summary-strip">
+          <div class="sum-item"><strong id="sum-cards">0/5</strong><span>Kartu Terpindai</span></div>
+          <div class="sum-item"><strong id="sum-facts">0/15</strong><span>Fakta Dibaca</span></div>
+          <div class="sum-item"><strong id="sum-quiz">0/5</strong><span>Kuis Lulus</span></div>
+        </div>
+        <div id="passport-empty" class="empty-box" hidden>
+          <p>Belum ada kartu fisik yang terpindai. Arahkan kamera ke Kartu ZooCard, atau buka contoh 3D dulu untuk mencoba.</p>
+          <div class="state-actions">
+            <button id="btn-empty-demo" type="button" class="btn-primary">Coba Harimau Sumatra</button>
+            <button type="button" class="btn-secondary" data-close="modal-passport">Kembali ke Kamera</button>
+          </div>
+        </div>
+        <div id="album-grid" class="album-grid"></div>
+      </div>
+
+      <div id="panel-bandingkan" role="tabpanel" aria-labelledby="tab-bandingkan" hidden>
+        <div id="compare-empty" class="empty-box" hidden>
+          <p id="compare-empty-msg">Pindai minimal 2 kartu untuk membandingkan koleksimu secara bebas.</p>
+          <div class="state-actions">
+            <button id="btn-compare-sample" type="button" class="btn-primary">Lihat Contoh Perbandingan</button>
+            <button type="button" class="btn-secondary" data-close="modal-passport">Kembali Scan Kartu</button>
+          </div>
+        </div>
+
+        <div id="compare-body">
+          <div class="compare-selects">
+            <div class="field-group">
+              <label for="cmp-a">Satwa Pertama</label>
+              <select id="cmp-a"></select>
+            </div>
+            <div class="field-group">
+              <label for="cmp-b">Satwa Kedua</label>
+              <select id="cmp-b"></select>
+            </div>
+          </div>
+          <div id="compare-result"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: AR Expedition Photo Preview -->
+  <div id="modal-photo" class="modal-bg" role="dialog" aria-modal="true" aria-labelledby="photo-title">
+    <div class="sheet-card">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-head">
+        <h2 id="photo-title">Kartu Foto Ekspedisi</h2>
+        <button type="button" class="close-btn" data-close="modal-photo" aria-label="Tutup pratinjau foto">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="photo-frame">
+        <img id="photo-preview-img" width="720" height="960" alt="Pratinjau foto AR bersama satwa 3D" src="" />
+      </div>
+      <div class="photo-actions">
+        <button id="btn-save-photo" type="button" class="btn-primary">Simpan ke Galeri</button>
+        <button type="button" class="btn-secondary" data-close="modal-photo">Foto Ulang</button>
+      </div>
+      <div id="photo-status" role="status" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <!-- Modal: Settings -->
+  <div id="modal-settings" class="modal-bg" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <div class="sheet-card">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-head">
+        <h2 id="settings-title">Pengaturan ZooCard AR</h2>
+        <button type="button" class="close-btn" data-close="modal-settings" aria-label="Tutup pengaturan">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="set-row">
+        <div class="set-copy">
+          <strong>Nama Penjelajah</strong>
+          <small id="set-explorer-name">Penjelajah (tampil di Paspor &amp; Foto AR)</small>
+        </div>
+        <button id="btn-edit-name-settings" type="button" class="btn-secondary">Ubah</button>
+      </div>
+
+      <div class="set-row">
+        <div class="set-copy">
+          <strong>Otomatis Bacakan Fakta</strong>
+          <small>Narasi Bahasa Indonesia berjalan otomatis saat kartu dipindai.</small>
+        </div>
+        <button id="btn-autotts" type="button" class="toggle-btn" aria-pressed="true">Aktif</button>
+      </div>
+
+      <div class="set-row">
+        <div class="set-copy">
+          <strong>Putar Otomatis Model 3D</strong>
+          <small>Matikan jika ingin satwa diam sampai digeser dengan jari.</small>
+        </div>
+        <button id="btn-autorotate" type="button" class="toggle-btn" aria-pressed="true">Aktif</button>
+      </div>
+
+      <div class="set-row">
+        <div class="set-copy">
+          <strong>Sembunyikan Saat Kartu Dijauhkan</strong>
+          <small>Model 3D kembali ke kamera saat kode QR keluar dari layar.</small>
+        </div>
+        <button id="btn-autohide" type="button" class="toggle-btn" aria-pressed="false">Mati</button>
+      </div>
+
+      <div class="set-row">
+        <div class="set-copy">
+          <strong>Mode Offline Lokal</strong>
+          <small class="ok">Aktif: 5 model GLB tersimpan di perangkat tanpa internet.</small>
+        </div>
+      </div>
+
+      <div class="set-row">
+        <div class="set-copy">
+          <strong>Reset Progres Paspor</strong>
+          <small>Hapus stempel kartu, fakta, dan kuis untuk sesi belajar baru.</small>
+        </div>
+        <button id="btn-reset-ask" type="button" class="btn-secondary">Reset</button>
+      </div>
+
+      <div id="reset-confirm" class="reset-confirm" role="alert">
+        Hapus semua progres kartu, fakta dibaca, dan bintang kuis?
+        <div class="reset-confirm-btns">
+          <button id="btn-reset-yes" type="button" class="btn-danger">Ya, Hapus Progres</button>
+          <button id="btn-reset-no" type="button" class="btn-secondary">Batal</button>
+        </div>
+      </div>
+
+      <p class="credits">
+        <strong>Atribusi Aset 3D (Sketchfab CC BY / CC BY-NC):</strong><br />
+        Tiger by Blender Artist (@moizmuhammad373), Model 116A Komodo Dragon by DigitalLife3D (NHM Vienna), Elephant Animation Idle by GremorySaiyan, Giraffe by Amx360, Emperor Penguin Looking Around by yinjo.<br /><br />
+        <strong>Atribusi Suara Satwa (Wikimedia Commons):</strong><br />
+        Harimau oleh schots (CC0), Desisan Komodo diadaptasi dari Zabuhailo (CC0), Gajah oleh தகவலுழவன் (CC0), Jerapah oleh Anton Baotic, Florian Sicks &amp; Angela S. Stoeger (CC BY-SA 4.0), Penguin oleh Hullwarren (CC BY-SA 3.0).
+      </p>
+    </div>
+  </div>
+
+  <!-- Modal: Optional Local Explorer Name (First-Run or Rename) -->
+  <div id="modal-welcome" class="modal-bg" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
+    <div class="sheet-card">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-head">
+        <div class="sheet-title-wrap">
+          <svg class="brand-mark" viewBox="0 0 108 108" aria-hidden="true">
+            <rect width="108" height="108" fill="#0B6B4B"/>
+            <path d="M0,74L108,40L108,108L0,108z" fill="#085239"/>
+            <rect x="37" y="21" width="47" height="56" rx="8" fill="#FBBF24"/>
+            <rect x="23" y="28" width="47" height="58" rx="8" fill="#FFFDF7"/>
+            <path d="M39,33l3.2,4.2h8.6l3.2,-4.2l1.2,7.2c0.2,3.4 -3.1,5.8 -8.7,5.8s-8.9,-2.4 -8.7,-5.8z" fill="#0B6B4B"/>
+            <path d="M33,50h27v6L43,70H60V76H33v-6L50,56H33z" fill="#16261E"/>
+          </svg>
+          <h2 id="welcome-title">Selamat Datang, Penjelajah!</h2>
+        </div>
+        <button type="button" class="close-btn" data-close="modal-welcome" aria-label="Lewati dan tutup dialog nama">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <p class="welcome-lead">Tulis nama panggilanmu untuk ditampilkan di Paspor Penjelajah dan Kartu Foto AR. Tidak perlu akun atau login.</p>
+      <form id="welcome-form">
+        <div class="text-field">
+          <label for="explorer-name-input">Nama Panggilan (opsional)</label>
+          <input id="explorer-name-input" name="explorerName" type="text" maxlength="24" autocomplete="given-name" placeholder="Nama kamu..." />
+        </div>
+        <div class="welcome-actions">
+          <button id="btn-welcome-save" type="submit" class="btn-primary">Mulai Jelajah</button>
+          <button id="btn-welcome-skip" type="button" class="btn-secondary">Lewati</button>
+        </div>
+      </form>
+      <p class="welcome-note">Nama disimpan hanya di perangkat ini (100% offline) dan bisa diubah kapan saja lewat Paspor atau Pengaturan.</p>
+    </div>
+  </div>
+
+  <!-- Camera Permission Error Screen with Graceful Demo Option -->
+  <section id="cam-error" aria-label="Izin Kamera Diperlukan">
+    <div class="cam-err-icon" aria-hidden="true">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+    </div>
+    <h2>Izinkan Kamera Belakang</h2>
+    <p>ZooCard AR memerlukan kamera belakang untuk memindai kartu satwa. Jika kamera belum tersedia, kamu tetap bisa menjelajahi satwa 3D di mode coba.</p>
+    <div class="state-actions">
+      <button id="btn-retry-cam" type="button" class="btn-primary">Aktifkan Kamera</button>
+      <button id="btn-cam-demo" type="button" class="btn-secondary">Coba Harimau 3D</button>
+    </div>
+  </section>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+    const STAMP_SVGS = {
+      tiger: `<svg viewBox="0 0 40 40" fill="none" aria-hidden="true"><rect width="40" height="40" rx="10" fill="#fef3c7"/><circle cx="11" cy="11" r="4.5" fill="#d97706"/><circle cx="29" cy="11" r="4.5" fill="#d97706"/><circle cx="20" cy="21" r="12" fill="#f59e0b"/><path d="M12 15l4 2M28 15l-4 2M10 21h4M26 21h4M20 9v4" stroke="#16261e" stroke-width="2" stroke-linecap="round"/><ellipse cx="20" cy="25.5" rx="5.5" ry="4" fill="#fffdf7"/><circle cx="16" cy="19.5" r="1.5" fill="#16261e"/><circle cx="24" cy="19.5" r="1.5" fill="#16261e"/><polygon points="18.2,23.5 21.8,23.5 20,25.5" fill="#9f1239"/></svg>`,
+      komodo: `<svg viewBox="0 0 40 40" fill="none" aria-hidden="true"><rect width="40" height="40" rx="10" fill="#e3f3ec"/><path d="M8 25c4-7 11-11 19-10 3 .4 5 2.5 5 5s-2.5 4.5-6 4.5H14l-4 4z" fill="#0b6b4b"/><path d="M32 21l4 1.5M32 21l3.5-1.5" stroke="#9f1239" stroke-width="1.8" stroke-linecap="round"/><circle cx="26.5" cy="18.5" r="1.5" fill="#fffdf7"/><path d="M14 25v5M21 24.5v5.5" stroke="#085239" stroke-width="2.5" stroke-linecap="round"/><path d="M13 18l2-2M18 16l2-2M23 15.5l1.5-1.8" stroke="#085239" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+      elephant: `<svg viewBox="0 0 40 40" fill="none" aria-hidden="true"><rect width="40" height="40" rx="10" fill="#f3efe6"/><ellipse cx="10.5" cy="20" rx="5.5" ry="8" fill="#5c6f65"/><ellipse cx="29.5" cy="20" rx="5.5" ry="8" fill="#5c6f65"/><circle cx="20" cy="19" r="9.5" fill="#6b7f74"/><path d="M20 22v9c0 2 2.5 2 2.5 0" stroke="#42594d" stroke-width="3.6" stroke-linecap="round"/><path d="M14.5 24c-1 2.2-1 4 .2 5M25.5 24c1 2.2 1 4-.2 5" stroke="#fffdf7" stroke-width="2" stroke-linecap="round"/><circle cx="16.8" cy="17.5" r="1.4" fill="#16261e"/><circle cx="23.2" cy="17.5" r="1.4" fill="#16261e"/></svg>`,
+      giraffe: `<svg viewBox="0 0 40 40" fill="none" aria-hidden="true"><rect width="40" height="40" rx="10" fill="#fef3c7"/><path d="M17 34l1.5-17h4L24 34" fill="#f59e0b"/><ellipse cx="21" cy="14" rx="6.5" ry="4.8" fill="#f59e0b"/><path d="M18 9.5V6.5M23 9.5V6.5" stroke="#92400e" stroke-width="2" stroke-linecap="round"/><circle cx="18" cy="6" r="1.4" fill="#92400e"/><circle cx="23" cy="6" r="1.4" fill="#92400e"/><circle cx="20" cy="23" r="1.8" fill="#92400e"/><circle cx="22" cy="29" r="1.6" fill="#92400e"/><circle cx="19" cy="13.5" r="1.3" fill="#16261e"/></svg>`,
+      penguin: `<svg viewBox="0 0 40 40" fill="none" aria-hidden="true"><rect width="40" height="40" rx="10" fill="#e0f2fe"/><ellipse cx="20" cy="22" rx="9.5" ry="12" fill="#16261e"/><ellipse cx="20" cy="24.5" rx="6" ry="8.5" fill="#fffdf7"/><path d="M15 14c1.2 1.8 2.8 2.2 4 2.2" stroke="#fbbf24" stroke-width="2.2" stroke-linecap="round"/><polygon points="20,16.5 24.5,18 20,19.5" fill="#d97706"/><circle cx="18" cy="15.2" r="1.3" fill="#fffdf7"/><path d="M15 33.5h3.5M21.5 33.5H25" stroke="#d97706" stroke-width="2.4" stroke-linecap="round"/></svg>`
+    };
+
+    const ANIMALS = {
+      'ZC-01': {
+        id: 'tiger',
+        code: 'ZC-01',
+        file: 'harimau-sumatra.glb',
+        targetSize: 2.35,
+        rotY: 0.35,
+        realHeightM: 1.05,
+        name: 'Harimau Sumatra',
+        sci: 'Panthera tigris sumatrae',
+        status: 'Kritis (CR)',
+        statusType: 'cr',
+        statusMeaning: 'Populasinya di alam liar sangat sedikit dan berisiko tinggi punah.',
+        diet: 'Karnivora (Daging)',
+        habitat: 'Hutan Hujan Sumatra, Indonesia',
+        speedVal: '60 km/jam',
+        speedPct: 82,
+        sizeVal: '2,4 meter (panjang)',
+        sizePct: 55,
+        weightVal: '140 kg',
+        weightPct: 35,
+        scaleCompareNote: 'Tinggi bahunya sekitar 1 meter, hampir setara tinggi anak 1,2 m, dengan panjang tubuh 2,4 m.',
+        feedLabel: 'Beri Daging',
+        feedColor: 0xc2410c,
+        feedFact: 'Harimau Sumatra berburu sendirian di malam hari. Dalam sekali makan, ia bisa menyantap hingga 15 kg daging.',
+        intro: 'Halo! Aku Harimau Sumatra dari Indonesia. Aku satu-satunya subspesies harimau Indonesia yang masih bertahan hidup.',
+        facts: [
+          'Kakiku punya selaput di sela jari, jadi aku jago berenang menyeberangi sungai.',
+          'Pola loreng hitam di tubuhku unik seperti sidik jari manusia, tidak ada yang kembar.',
+          'Aku adalah subspesies harimau terkecil di dunia yang hidup di hutan hujan Sumatra.'
+        ],
+        quizzes: [
+          {
+            q: 'Mengapa Harimau Sumatra jago berenang di sungai?',
+            opts: ['Punya selaput di sela jari kakinya', 'Punya sirip di punggungnya', 'Tubuhnya sangat ringan seperti burung'],
+            ans: 0,
+            explain: 'Selaput tipis di sela jari kaki membantu harimau mendayung lebih kuat saat berenang.'
+          },
+          {
+            q: 'Apa keunikan pola loreng hitam pada tubuh Harimau Sumatra?',
+            opts: ['Selalu sama pada setiap harimau', 'Unik di tiap individu seperti sidik jari', 'Berubah warna menjadi putih saat malam'],
+            ans: 1,
+            explain: 'Setiap harimau memiliki susunan garis loreng berbeda yang bisa dipakai peneliti untuk mengenalinya.'
+          },
+          {
+            q: 'Apa arti status konservasi Kritis (CR) pada Harimau Sumatra?',
+            opts: ['Jumlahnya sangat melimpah di kota', 'Berisiko sangat tinggi punah di alam liar', 'Sudah tidak membutuhkan hutan lagi'],
+            ans: 1,
+            explain: 'Status Kritis (Critically Endangered) berarti habitat dan populasinya harus segera dilindungi.'
+          }
+        ]
+      },
+      'ZC-02': {
+        id: 'komodo',
+        code: 'ZC-02',
+        file: 'komodo.glb',
+        targetSize: 2.55,
+        rotY: 0.45,
+        realHeightM: 0.65,
+        name: 'Komodo',
+        sci: 'Varanus komodoensis',
+        status: 'Terancam (EN)',
+        statusType: 'cr',
+        statusMeaning: 'Populasinya terbatas di beberapa pulau kecil di NTT dan rentan terganggu.',
+        diet: 'Karnivora (Daging)',
+        habitat: 'Pulau Komodo & Rinca, NTT',
+        speedVal: '20 km/jam',
+        speedPct: 36,
+        sizeVal: '3,0 meter (panjang)',
+        sizePct: 68,
+        weightVal: '90 kg',
+        weightPct: 26,
+        scaleCompareNote: 'Tubuhnya rendah sekitar 0,65 m, tetapi panjangnya mencapai 3 m, lebih panjang dari 2 anak berbaring berurutan.',
+        feedLabel: 'Beri Daging',
+        feedColor: 0xb91c1c,
+        feedFact: 'Komodo memiliki rahang elastis dan bisa memakan mangsa berukuran besar dalam satu kali makan, lalu beristirahat lama.',
+        intro: 'Halo! Aku Komodo dari Nusa Tenggara Timur, kadal raksasa terbesar yang masih hidup di bumi.',
+        facts: [
+          'Aku menjulurkan lidah bercabang untuk mendeteksi bau mangsa dari jarak berkilo-kilometer.',
+          'Panjang tubuhku bisa mencapai 3 meter dengan kulit bersisik keras seperti baju zirah.',
+          'Aku memiliki kelenjar bisa di rahang bawah untuk melemahkan mangsa saat berburu.'
+        ],
+        quizzes: [
+          {
+            q: 'Indera apa yang dipakai Komodo untuk mencium bau mangsa dari jauh?',
+            opts: ['Telinga yang lebar', 'Lidah bercabang yang dijulurkan', 'Ekornya yang panjang'],
+            ans: 1,
+            explain: 'Lidah bercabang Komodo mengambil partikel bau di udara lalu mengirimkannya ke organ penciuman di langit-langit mulut.'
+          },
+          {
+            q: 'Di provinsi mana habitat asli Komodo di Indonesia?',
+            opts: ['Nusa Tenggara Timur (NTT)', 'Kalimantan Barat', 'Jawa Tengah'],
+            ans: 0,
+            explain: 'Komodo hidup alami di Pulau Komodo, Rinca, Flores, dan pulau kecil sekitarnya di NTT.'
+          },
+          {
+            q: 'Apa fungsi kulit bersisik keras pada tubuh Komodo?',
+            opts: ['Membantu terbang di udara', 'Melindungi tubuh seperti baju zirah alami', 'Menyimpan air es'],
+            ans: 1,
+            explain: 'Di bawah sisik Komodo terdapat lempeng tulang kecil (osteoderm) yang melindunginya dari gigitan.'
+          }
+        ]
+      },
+      'ZC-03': {
+        id: 'elephant',
+        code: 'ZC-03',
+        file: 'gajah-afrika.glb',
+        targetSize: 2.35,
+        rotY: 0.4,
+        realHeightM: 3.4,
+        name: 'Gajah Sabana Afrika',
+        sci: 'Loxodonta africana',
+        status: 'Terancam (EN)',
+        statusType: 'cr',
+        statusMeaning: 'Populasinya menurun akibat kehilangan habitat dan perburuan gading.',
+        diet: 'Herbivora (Tumbuhan)',
+        habitat: 'Sabana Afrika',
+        speedVal: '40 km/jam',
+        speedPct: 60,
+        sizeVal: '4,0 meter (tinggi maks)',
+        sizePct: 82,
+        weightVal: '6.000 kg',
+        weightPct: 100,
+        scaleCompareNote: 'Tingginya sekitar 3,4 m sampai 4 m, hampir 3 kali lebih tinggi dari anak 1,2 m.',
+        feedLabel: 'Beri Dedaunan',
+        feedColor: 0x15803d,
+        feedFact: 'Gajah dewasa membutuhkan sekitar 150 kg dedaunan, rumput, dan kulit kayu setiap hari untuk menjaga tenaganya.',
+        intro: 'Halo! Aku Gajah Sabana Afrika, hewan darat terbesar dan terberat yang hidup di bumi.',
+        facts: [
+          'Telingaku yang lebar berfungsi seperti kipas untuk menurunkan suhu tubuh di terik sabana.',
+          'Belalaiku punya puluhan ribu otot tanpa tulang, cukup luwes untuk memungut kacang hingga mengangkat kayu.',
+          'Kawananku dipimpin oleh gajah betina tertua yang bijaksana, disebut matriark.'
+        ],
+        quizzes: [
+          {
+            q: 'Apa fungsi utama telinga lebar pada Gajah Sabana Afrika?',
+            opts: ['Untuk terbang di sabana', 'Membantu mendinginkan suhu tubuh', 'Menyimpan cadangan air minum'],
+            ans: 1,
+            explain: 'Pembuluh darah di telinga gajah melepas panas tubuh ke udara saat telinga dikibaskan.'
+          },
+          {
+            q: 'Siapa pemimpin kawanan Gajah Sabana Afrika?',
+            opts: ['Gajah betina tertua (matriark)', 'Anak gajah termuda', 'Gajah yang paling kecil'],
+            ans: 0,
+            explain: 'Matriark mengingat rute menuju sumber air dan tempat makan aman selama musim kering.'
+          },
+          {
+            q: 'Mengapa belalai gajah bisa melakukan gerakan halus sekaligus kuat?',
+            opts: ['Diisi rangka baja', 'Memiliki puluhan ribu otot tanpa tulang', 'Terbuat dari tulang keras'],
+            ans: 1,
+            explain: 'Belalai gajah adalah gabungan hidung dan bibir atas yang tersusun dari puluhan ribu berkas otot.'
+          }
+        ]
+      },
+      'ZC-04': {
+        id: 'giraffe',
+        code: 'ZC-04',
+        file: 'jerapah.glb',
+        targetSize: 2.55,
+        rotY: 0.35,
+        realHeightM: 5.5,
+        name: 'Jerapah',
+        sci: 'Giraffa camelopardalis',
+        status: 'Rentan (VU)',
+        statusType: 'vu',
+        statusMeaning: 'Populasinya perlu dipantau agar tidak terus menyusut di padang sabana.',
+        diet: 'Herbivora (Daun Akasia)',
+        habitat: 'Sabana Afrika',
+        speedVal: '55 km/jam',
+        speedPct: 78,
+        sizeVal: '5,5 meter (tinggi)',
+        sizePct: 100,
+        weightVal: '1.200 kg',
+        weightPct: 68,
+        scaleCompareNote: 'Tingginya mencapai 5,5 m, lebih dari 4 kali tinggi anak 1,2 m.',
+        feedLabel: 'Beri Daun Akasia',
+        feedColor: 0x65a30d,
+        feedFact: 'Jerapah melilitkan lidahnya yang panjang di sekitar ranting berduri pohon akasia untuk memetik daun pucuk yang segar.',
+        intro: 'Halo! Aku Jerapah, hewan darat paling tinggi di bumi dengan leher yang menjulang.',
+        facts: [
+          'Jumlah tulang leherku sama dengan manusia, hanya 7 ruas, tetapi setiap ruasnya sangat panjang.',
+          'Lidahku berwarna biru keunguan sepanjang 45 cm agar terlindung dari terik sinar matahari.',
+          'Aku hanya tidur sebentar, rata-rata kurang dari 2 jam sehari, sering kali sambil berdiri.'
+        ],
+        quizzes: [
+          {
+            q: 'Berapa jumlah ruas tulang leher yang dimiliki Jerapah?',
+            opts: ['7 ruas, sama seperti manusia', '30 ruas panjang', '50 ruas kecil'],
+            ans: 0,
+            explain: 'Hampir semua mamalia, termasuk manusia dan jerapah, sama-sama memiliki 7 ruas tulang leher.'
+          },
+          {
+            q: 'Mengapa ujung lidah Jerapah berwarna gelap biru keunguan?',
+            opts: ['Karena memakan tinta biru', 'Untuk melindunginya dari sinar matahari saat makan daun tinggi', 'Supaya menyala dalam gelap'],
+            ans: 1,
+            explain: 'Pigmen melanin gelap pada lidah jerapah membantu mencegah luka bakar matahari saat merenggut daun.'
+          },
+          {
+            q: 'Kira-kira berapa lama Jerapah tidur dalam sehari?',
+            opts: ['Kurang dari 2 jam sehari', '12 jam penuh', '18 jam di dalam gua'],
+            ans: 0,
+            explain: 'Jerapah tidur singkat berkali-kali agar tetap waspada terhadap predator di padang terbuka.'
+          }
+        ]
+      },
+      'ZC-05': {
+        id: 'penguin',
+        code: 'ZC-05',
+        file: 'penguin-kaisar.glb',
+        targetSize: 2.05,
+        rotY: 0.25,
+        realHeightM: 1.2,
+        name: 'Penguin Kaisar',
+        sci: 'Aptenodytes forsteri',
+        status: 'Hampir Terancam (NT)',
+        statusType: 'nt',
+        statusMeaning: 'Sangat bergantung pada kestabilan es laut Antartika untuk berkembang biak.',
+        diet: 'Karnivora (Ikan & Krill)',
+        habitat: 'Benua Es Antartika',
+        speedVal: '36 km/jam (Renang)',
+        speedPct: 54,
+        sizeVal: '1,2 meter (tinggi)',
+        sizePct: 34,
+        weightVal: '40 kg',
+        weightPct: 18,
+        scaleCompareNote: 'Tingginya sekitar 1,2 m, hampir sama persis dengan tinggi anak sekolah dasar.',
+        feedLabel: 'Beri Ikan',
+        feedColor: 0x0284c7,
+        feedFact: 'Penguin Kaisar menyelam ratusan meter di laut es untuk mengejar ikan, krill, dan cumi-cumi dengan sayap mirip sirip.',
+        intro: 'Halo! Aku Penguin Kaisar dari Antartika. Aku tidak bisa terbang di udara, tetapi aku perenang ulung di laut es.',
+        facts: [
+          'Ayah penguin mengerami telur di atas kakinya sepanjang musim dingin tanpa makan sekitar 2 bulan.',
+          'Aku bisa menyelam lebih dari 500 meter di bawah laut es untuk berburu ikan dan cumi-cumi.',
+          'Aku adalah spesies penguin tertinggi dan terberat di seluruh dunia.'
+        ],
+        quizzes: [
+          {
+            q: 'Siapa yang mengerami telur Penguin Kaisar di atas kakinya saat musim dingin?',
+            opts: ['Induk betina', 'Induk jantan (ayah penguin)', 'Ditinggalkan di sarang batu'],
+            ans: 1,
+            explain: 'Ayah penguin menjaga telur tetap hangat di lipatan kulit perutnya sementara ibu penguin mencari makan di laut.'
+          },
+          {
+            q: 'Seberapa dalam Penguin Kaisar mampu menyelam saat berburu?',
+            opts: ['Hanya 5 meter', 'Lebih dari 500 meter', 'Tidak bisa menyelam sama sekali'],
+            ans: 1,
+            explain: 'Penguin Kaisar bisa menahan napas lebih dari 20 menit dan menyelam melampaui 500 meter.'
+          },
+          {
+            q: 'Mengapa suhu bumi yang menghangat memengaruhi Penguin Kaisar?',
+            opts: ['Mereka membutuhkan es laut stabil untuk berkembang biak', 'Mereka butuh gurun pasir', 'Mereka hidup di puncak gunung berapi'],
+            ans: 0,
+            explain: 'Jika es laut mencair terlalu cepat, anak penguin yang belum memiliki bulu tahan air terancam keselamatannya.'
+          }
+        ]
+      }
+    };
+
+    const ANIMAL_CODES = Object.keys(ANIMALS);
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // Load v4 state or migrate seamlessly from v3 progress.
+    function loadProgress() {
+      const rawV4 = localStorage.getItem('zoocard_v4');
+      if (rawV4) {
+        try {
+          const d = JSON.parse(rawV4);
+          return {
+            collected: new Set((d.collected || []).filter(c => ANIMALS[c])),
+            stars: new Set((d.stars || []).filter(c => ANIMALS[c])),
+            factsRead: d.factsRead && typeof d.factsRead === 'object' ? d.factsRead : {},
+            prefs: d.prefs && typeof d.prefs === 'object' ? d.prefs : {},
+            explorerName: typeof d.explorerName === 'string' ? d.explorerName.trim().slice(0, 24) : '',
+            explorerSeen: Boolean(d.explorerSeen)
+          };
+        } catch {}
+      }
+      try {
+        const oldV3 = JSON.parse(localStorage.getItem('zoocard_v3') || '{}');
+        return {
+          collected: new Set((oldV3.collected || []).filter(c => ANIMALS[c])),
+          stars: new Set((oldV3.stars || []).filter(c => ANIMALS[c])),
+          factsRead: {},
+          prefs: {},
+          explorerName: '',
+          explorerSeen: false
+        };
+      } catch {
+        return { collected: new Set(), stars: new Set(), factsRead: {}, prefs: {}, explorerName: '', explorerSeen: false };
+      }
+    }
+
+    const progress = loadProgress();
+    let activeCode = null;
+    let isDemoSession = false;
+    let factIdx = 0;
+    let showingFeedFact = false;
+    let isFocusMode = false;
+    let isScaleCompareOn = false;
+    let isSpeaking = false;
+    let isMuted = Boolean(progress.prefs.isMuted);
+    let autoTts = progress.prefs.autoTts !== undefined ? Boolean(progress.prefs.autoTts) : true;
+    let autoHide = Boolean(progress.prefs.autoHide);
+    let autoRotate = progress.prefs.autoRotate !== undefined
+      ? Boolean(progress.prefs.autoRotate)
+      : !prefersReducedMotion;
+    let lastSeenTime = 0;
+    let compareSampleMode = false;
+    let capturedPhotoDataUrl = '';
+
+    // Quiz session state for currently open Bio modal
+    let quizIdx = 0;
+    let quizCorrectCount = 0;
+
+    function saveProgress() {
+      const cleanFacts = {};
+      ANIMAL_CODES.forEach(code => {
+        const arr = Array.isArray(progress.factsRead[code]) ? progress.factsRead[code] : [];
+        cleanFacts[code] = [...new Set(arr.filter(i => i >= 0 && i < ANIMALS[code].facts.length))];
+      });
+      progress.factsRead = cleanFacts;
+      localStorage.setItem('zoocard_v4', JSON.stringify({
+        collected: Array.from(progress.collected),
+        stars: Array.from(progress.stars),
+        factsRead: cleanFacts,
+        prefs: { isMuted, autoTts, autoHide, autoRotate },
+        explorerName: progress.explorerName,
+        explorerSeen: progress.explorerSeen
+      }));
+      document.getElementById('col-badge').textContent = `${progress.collected.size}/5`;
+      syncExplorerNameUI();
+    }
+
+    function getDisplayExplorerName() {
+      return progress.explorerName || 'Penjelajah';
+    }
+
+    function syncExplorerNameUI() {
+      const display = getDisplayExplorerName();
+      const passEl = document.getElementById('passport-owner-name');
+      if (passEl) passEl.textContent = display;
+      const setEl = document.getElementById('set-explorer-name');
+      if (setEl) setEl.textContent = `${display} (tampil di Paspor & Foto AR)`;
+    }
+
+    function markFactRead(code, idx) {
+      if (idx <= 0 || !ANIMALS[code]) return;
+      const factPos = idx - 1;
+      const current = Array.isArray(progress.factsRead[code]) ? progress.factsRead[code] : [];
+      if (!current.includes(factPos)) {
+        current.push(factPos);
+        progress.factsRead[code] = current;
+        saveProgress();
+      }
+    }
+
+    // Three.js WebGL scene over transparent camera layer
+    const webglLayer = document.getElementById('webgl-layer');
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.05, 60);
+
+    function fitCameraToViewport() {
+      const aspect = window.innerWidth / Math.max(1, window.innerHeight);
+      camera.aspect = aspect;
+      const zDist = aspect < 0.62 ? 6.0 : (aspect < 0.85 ? 5.2 : 4.5);
+      camera.position.set(0, 1.48, zDist);
+      camera.lookAt(0, 0.55, 0);
+      camera.updateProjectionMatrix();
+    }
+    fitCameraToViewport();
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(0x000000, 0);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    webglLayer.appendChild(renderer.domElement);
+
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x334155, 1.12));
+    const keyLight = new THREE.DirectionalLight(0xfffbeb, 1.5);
+    keyLight.position.set(3.5, 7, 5);
+    scene.add(keyLight);
+
+    function makeShadowDisc() {
+      const c = document.createElement('canvas');
+      c.width = 128;
+      c.height = 128;
+      const ctx = c.getContext('2d');
+      const g = ctx.createRadialGradient(64, 64, 8, 64, 64, 62);
+      g.addColorStop(0, 'rgba(0,0,0,0.40)');
+      g.addColorStop(0.65, 'rgba(0,0,0,0.14)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 128, 128);
+      const tex = new THREE.CanvasTexture(c);
+      const m = new THREE.Mesh(
+        new THREE.PlaneGeometry(2.3, 2.3),
+        new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false })
+      );
+      m.rotation.x = -Math.PI / 2;
+      m.position.y = 0.005;
+      return m;
+    }
+
+    // Build a 1.0-unit-tall child reference figure scaled dynamically to each animal's real height.
+    function makeScaleReferenceGroup() {
+      const grp = new THREE.Group();
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0xfbbf24,
+        roughness: 0.45,
+        metalness: 0.05,
+        transparent: true,
+        opacity: 0.9
+      });
+      const poleMat = new THREE.MeshBasicMaterial({ color: 0xfffdf7 });
+
+      const legGeo = new THREE.CylinderGeometry(0.036, 0.032, 0.42, 10);
+      const leftLeg = new THREE.Mesh(legGeo, mat);
+      leftLeg.position.set(-0.055, 0.21, 0);
+      const rightLeg = new THREE.Mesh(legGeo, mat);
+      rightLeg.position.set(0.055, 0.21, 0);
+
+      const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.075, 0.34, 12), mat);
+      torso.position.set(0, 0.59, 0);
+
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.095, 14, 12), mat);
+      head.position.set(0, 0.885, 0);
+
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 1.0, 8), poleMat);
+      pole.position.set(0.18, 0.5, 0);
+      const topTick = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.016, 0.016), poleMat);
+      topTick.position.set(0.12, 0.99, 0);
+
+      // Canvas sprite badge showing "Anak 1,2 m"
+      const lblCanvas = document.createElement('canvas');
+      lblCanvas.width = 256;
+      lblCanvas.height = 72;
+      const ctx = lblCanvas.getContext('2d');
+      ctx.fillStyle = '#16261e';
+      ctx.beginPath();
+      ctx.roundRect(6, 6, 244, 60, 14);
+      ctx.fill();
+      ctx.strokeStyle = '#fbbf24';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+      ctx.fillStyle = '#fffdf7';
+      ctx.font = 'bold 30px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('Anak 1,2 m', 128, 37);
+
+      const sprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(lblCanvas), transparent: true })
+      );
+      sprite.scale.set(0.72, 0.21, 1);
+      sprite.position.set(0.06, 1.15, 0);
+
+      grp.add(leftLeg, rightLeg, torso, head, pole, topTick, sprite);
+      grp.visible = false;
+      return grp;
+    }
+
+    const stageGroup = new THREE.Group();
+    stageGroup.visible = false;
+    stageGroup.position.y = 0.22;
+    scene.add(stageGroup);
+
+    const shadowDisc = makeShadowDisc();
+    stageGroup.add(shadowDisc);
+
+    const modelHolder = new THREE.Group();
+    stageGroup.add(modelHolder);
+
+    const scaleRefGroup = makeScaleReferenceGroup();
+    stageGroup.add(scaleRefGroup);
+
+    const particles = [];
+    const starGeo = new THREE.OctahedronGeometry(0.065, 0);
+    const foodGeo = new THREE.DodecahedronGeometry(0.07, 0);
+
+    function spawnBurst(mode = 'star', customColor = 0xfbbf24) {
+      if (prefersReducedMotion) return;
+      const count = mode === 'feed' ? 12 : 10;
+      for (let i = 0; i < count; i++) {
+        const color = mode === 'feed'
+          ? (i % 3 === 0 ? 0xfbbf24 : customColor)
+          : (i % 2 === 0 ? 0xfbbf24 : 0x0b6b4b);
+        const m = new THREE.Mesh(
+          mode === 'feed' ? foodGeo : starGeo,
+          new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 })
+        );
+        if (mode === 'feed') {
+          const angle = (i / count) * Math.PI * 2;
+          m.position.set(Math.cos(angle) * 0.9, 1.4 + Math.random() * 0.3, Math.sin(angle) * 0.7);
+          m.userData = {
+            vx: -m.position.x * 0.045,
+            vy: -0.02 - Math.random() * 0.02,
+            vz: -m.position.z * 0.045,
+            gravity: 0.0005,
+            life: 1.0
+          };
+        } else {
+          m.position.set(0, 0.9, 0);
+          const a = Math.random() * Math.PI * 2;
+          const sp = 0.028 + Math.random() * 0.035;
+          m.userData = {
+            vx: Math.cos(a) * sp,
+            vy: 0.045 + Math.random() * 0.045,
+            vz: Math.sin(a) * sp,
+            gravity: 0.0026,
+            life: 1.0
+          };
+        }
+        stageGroup.add(m);
+        particles.push(m);
+      }
+    }
+
+    const gltfLoader = new GLTFLoader();
+    const modelCache = new Map();
+    let activeEntry = null;
+    let activeClipIdx = 0;
+    let targetScale = 1.0;
+    let currentScale = 0.05;
+    let rotY = 0.35;
+    let rotX = 0.05;
+    let zoomFactor = 1.0;
+    let bounceTimer = 0;
+
+    async function resolveModelUrl(filename) {
+      const candidates = [`./models/${filename}`, `./assets/models/${filename}`];
+      for (const u of candidates) {
+        try {
+          const r = await fetch(u, { method: 'HEAD' });
+          if (r.ok) return u;
+        } catch {}
+      }
+      return candidates[0];
+    }
+
+    async function getOrLoadAnimalModel(animal) {
+      if (modelCache.has(animal.code)) return modelCache.get(animal.code);
+      const url = await resolveModelUrl(animal.file);
+      return new Promise((resolve, reject) => {
+        gltfLoader.load(
+          url,
+          (gltf) => {
+            const raw = gltf.scene;
+            const wrapper = new THREE.Group();
+            const inner = new THREE.Group();
+            inner.add(raw);
+            wrapper.add(inner);
+
+            wrapper.updateMatrixWorld(true);
+            const box = new THREE.Box3().setFromObject(raw);
+            const sz = new THREE.Vector3();
+            const ctr = new THREE.Vector3();
+            box.getSize(sz);
+            box.getCenter(ctr);
+            const maxDim = Math.max(sz.x, sz.y, sz.z, 0.0001);
+            const s = animal.targetSize / maxDim;
+            inner.scale.setScalar(s);
+            inner.position.set(-ctr.x * s, -box.min.y * s, -ctr.z * s);
+
+            const scaledHeight = Math.max(0.4, sz.y * s);
+            const clips = gltf.animations || [];
+            const mixer = clips.length > 0 ? new THREE.AnimationMixer(raw) : null;
+            const entry = { root: wrapper, mixer, clips, scaledHeight };
+            modelCache.set(animal.code, entry);
+            resolve(entry);
+          },
+          undefined,
+          (err) => reject(err)
+        );
+      });
+    }
+
+    function playAnimationIndex(entry, idx) {
+      if (!entry || !entry.mixer || !entry.clips.length) return;
+      activeClipIdx = idx % entry.clips.length;
+      entry.mixer.stopAllAction();
+      const act = entry.mixer.clipAction(entry.clips[activeClipIdx]);
+      act.reset().fadeIn(0.2).play();
+    }
+
+    function updateScaleReferenceLayout() {
+      if (!activeCode || !activeEntry) {
+        scaleRefGroup.visible = false;
+        return;
+      }
+      const a = ANIMALS[activeCode];
+      scaleRefGroup.visible = isScaleCompareOn;
+      if (isScaleCompareOn) {
+        const rawChildH = (1.2 / a.realHeightM) * activeEntry.scaledHeight;
+        const clampedChildH = Math.max(0.32, Math.min(1.95, rawChildH));
+        scaleRefGroup.scale.setScalar(clampedChildH);
+        modelHolder.position.x = -0.42;
+        shadowDisc.position.x = -0.42;
+        scaleRefGroup.position.set(0.92, 0, 0);
+        targetScale = 0.86;
+      } else {
+        modelHolder.position.x = 0;
+        shadowDisc.position.x = 0;
+        targetScale = 1.0;
+      }
+    }
+
+    // Touch and keyboard controls on 3D canvas
+    const pointers = new Map();
+    let lastPinch = null;
+    let moved = false;
+
+    webglLayer.addEventListener('pointerdown', (e) => {
+      if (!activeCode) return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      moved = false;
+      lastPinch = null;
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (!pointers.has(e.pointerId)) return;
+      const prev = pointers.get(e.pointerId);
+      const curr = { x: e.clientX, y: e.clientY };
+      if (pointers.size === 1) {
+        const dx = curr.x - prev.x;
+        const dy = curr.y - prev.y;
+        if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
+        rotY += dx * 0.011;
+        rotX = Math.max(-0.32, Math.min(0.45, rotX + dy * 0.006));
+      } else if (pointers.size === 2) {
+        moved = true;
+        pointers.set(e.pointerId, curr);
+        const pts = Array.from(pointers.values());
+        const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        if (lastPinch !== null) {
+          zoomFactor = Math.max(0.55, Math.min(1.65, zoomFactor + (d - lastPinch) * 0.004));
+        }
+        lastPinch = d;
+        return;
+      }
+      pointers.set(e.pointerId, curr);
+    });
+
+    window.addEventListener('pointerup', (e) => {
+      if (pointers.size === 1 && !moved && activeCode) {
+        bounceTimer = prefersReducedMotion ? 0 : 0.6;
+        spawnBurst('star');
+        playAnimalSound(ANIMALS[activeCode].id);
+        if (activeEntry && activeEntry.clips.length > 1) {
+          playAnimationIndex(activeEntry, activeClipIdx + 1);
+          const cname = activeEntry.clips[activeClipIdx].name || `Gerakan ${activeClipIdx + 1}`;
+          showToast(`Gerakan: ${cname}`, true);
+        }
+      }
+      pointers.delete(e.pointerId);
+      if (pointers.size < 2) lastPinch = null;
+    });
+
+    window.addEventListener('pointercancel', (e) => pointers.delete(e.pointerId));
+
+    webglLayer.addEventListener('keydown', (e) => {
+      if (!activeCode) return;
+      if (e.key === 'ArrowLeft') { rotY -= 0.25; e.preventDefault(); }
+      else if (e.key === 'ArrowRight') { rotY += 0.25; e.preventDefault(); }
+      else if (e.key === '+' || e.key === '=') { zoomFactor = Math.min(1.65, zoomFactor + 0.12); e.preventDefault(); }
+      else if (e.key === '-') { zoomFactor = Math.max(0.55, zoomFactor - 0.12); e.preventDefault(); }
+    });
+
+    const clock = new THREE.Clock();
+    function renderLoop() {
+      requestAnimationFrame(renderLoop);
+      if (!stageGroup.visible) return;
+      const dt = Math.min(clock.getDelta(), 0.06);
+
+      const desired = targetScale * zoomFactor;
+      currentScale += (desired - currentScale) * Math.min(1, dt * 10);
+      stageGroup.scale.setScalar(currentScale);
+
+      if (pointers.size === 0 && autoRotate && !prefersReducedMotion) {
+        rotY += dt * 0.22;
+      }
+      stageGroup.rotation.y = rotY;
+      stageGroup.rotation.x = rotX;
+
+      if (bounceTimer > 0) {
+        bounceTimer = Math.max(0, bounceTimer - dt);
+        modelHolder.position.y = Math.abs(Math.sin(bounceTimer * 10)) * 0.2;
+      } else {
+        modelHolder.position.y = 0;
+      }
+
+      if (activeEntry && activeEntry.mixer) {
+        activeEntry.mixer.update(dt);
+      }
+
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.position.x += p.userData.vx;
+        p.position.y += p.userData.vy;
+        p.position.z += p.userData.vz;
+        p.userData.vy -= p.userData.gravity;
+        p.rotation.y += 0.14;
+        p.userData.life -= dt * 1.35;
+        p.material.opacity = Math.max(0, p.userData.life);
+        if (p.userData.life <= 0) {
+          stageGroup.remove(p);
+          p.material.dispose();
+          particles.splice(i, 1);
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+    renderLoop();
+
+    window.addEventListener('resize', () => {
+      fitCameraToViewport();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Real offline animal audio clips (with Web Audio synth fallback) + Native Android TTS bridge
+    let audioCtx = null;
+    const soundBufferCache = new Map();
+    let activeSoundSource = null;
+    let activeAudioEl = null;
+    let soundPlaySeq = 0;
+
+    function getAudioCtx() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    }
+
+    function setAnimalSoundPlayingUI(playing) {
+      const btn = document.getElementById('btn-sound');
+      if (!btn) return;
+      btn.classList.toggle('playing', Boolean(playing));
+      const lbl = btn.querySelector('span');
+      if (lbl) lbl.textContent = playing ? 'Memutar...' : 'Suara';
+    }
+
+    function stopAnimalSound() {
+      soundPlaySeq += 1;
+      if (activeSoundSource) {
+        try { activeSoundSource.stop(); } catch {}
+        activeSoundSource = null;
+      }
+      if (activeAudioEl) {
+        try { activeAudioEl.pause(); activeAudioEl.currentTime = 0; } catch {}
+        activeAudioEl = null;
+      }
+      setAnimalSoundPlayingUI(false);
+    }
+
+    async function loadAnimalAudioBuffer(id) {
+      if (soundBufferCache.has(id)) return soundBufferCache.get(id);
+      const res = await fetch(`./sounds/${id}.wav`);
+      if (!res.ok) throw new Error(`Missing sound ${id}`);
+      const arr = await res.arrayBuffer();
+      const ctx = getAudioCtx();
+      const decoded = await ctx.decodeAudioData(arr);
+      soundBufferCache.set(id, decoded);
+      return decoded;
+    }
+
+    function playSynthFallback(id) {
+      try {
+        const ctx = getAudioCtx();
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = id === 'penguin' ? 'square' : 'sawtooth';
+        osc.frequency.setValueAtTime(id === 'elephant' ? 320 : 140, now);
+        osc.frequency.exponentialRampToValueAtTime(id === 'elephant' ? 520 : 80, now + 0.5);
+        g.gain.setValueAtTime(0.01, now);
+        g.gain.linearRampToValueAtTime(0.2, now + 0.08);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+        osc.connect(g);
+        g.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.56);
+      } catch {}
+    }
+
+    async function playAnimalSound(id) {
+      if (isMuted || !id) return;
+      stopAnimalSound();
+      const seq = soundPlaySeq;
+      setAnimalSoundPlayingUI(true);
+
+      try {
+        const ctx = getAudioCtx();
+        const buf = await loadAnimalAudioBuffer(id);
+        if (seq !== soundPlaySeq || isMuted) return;
+
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        const gain = ctx.createGain();
+        gain.gain.value = 0.95;
+        src.connect(gain);
+        gain.connect(ctx.destination);
+        src.onended = () => {
+          if (seq === soundPlaySeq) {
+            activeSoundSource = null;
+            setAnimalSoundPlayingUI(false);
+          }
+        };
+        activeSoundSource = src;
+        src.start(0);
+      } catch {
+        // Fallback to HTMLAudioElement if Web Audio decode fails on a device.
+        try {
+          if (seq !== soundPlaySeq || isMuted) return;
+          const el = new Audio(`./sounds/${id}.wav`);
+          activeAudioEl = el;
+          el.onended = () => {
+            if (seq === soundPlaySeq) {
+              activeAudioEl = null;
+              setAnimalSoundPlayingUI(false);
+            }
+          };
+          el.onerror = () => {
+            if (seq === soundPlaySeq) {
+              setAnimalSoundPlayingUI(false);
+              playSynthFallback(id);
+            }
+          };
+          await el.play();
+        } catch {
+          if (seq === soundPlaySeq) {
+            setAnimalSoundPlayingUI(false);
+            playSynthFallback(id);
+          }
+        }
+      }
+    }
+
+    function setSpeakingUI(active) {
+      isSpeaking = Boolean(active);
+      const btn = document.getElementById('btn-speak-toggle');
+      const lbl = document.getElementById('speak-lbl');
+      btn.setAttribute('aria-pressed', String(isSpeaking));
+      btn.classList.toggle('speaking', isSpeaking);
+      lbl.textContent = isSpeaking ? 'Hentikan' : 'Bacakan';
+    }
+
+    window.onNativeTtsState = (speaking) => setSpeakingUI(speaking);
+
+    function speakText(text) {
+      if (isMuted) return;
+      if (window.AndroidBridge && typeof window.AndroidBridge.speak === 'function') {
+        setSpeakingUI(true);
+        window.AndroidBridge.speak(text);
+        return;
+      }
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = 'id-ID';
+        u.rate = 1.0;
+        u.onstart = () => setSpeakingUI(true);
+        u.onend = () => setSpeakingUI(false);
+        u.onerror = () => setSpeakingUI(false);
+        window.speechSynthesis.speak(u);
+      }
+    }
+
+    function stopSpeak() {
+      if (window.AndroidBridge && typeof window.AndroidBridge.stopSpeak === 'function') {
+        window.AndroidBridge.stopSpeak();
+      }
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+      setSpeakingUI(false);
+    }
+
+    let toastTimer = null;
+    function showToast(msg, dark = false) {
+      const b = document.getElementById('toast-banner');
+      b.textContent = msg;
+      b.classList.toggle('dark', dark);
+      b.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => b.classList.remove('show'), 2200);
+    }
+
+    function syncControlStates() {
+      const muteBtn = document.getElementById('btn-mute');
+      muteBtn.setAttribute('aria-pressed', String(isMuted));
+      muteBtn.setAttribute('aria-label', isMuted ? 'Nyalakan suara' : 'Matikan suara');
+      document.getElementById('ico-sound-on').hidden = isMuted;
+      document.getElementById('ico-sound-off').hidden = !isMuted;
+
+      const rotBtn = document.getElementById('btn-rotate-toggle');
+      rotBtn.setAttribute('aria-pressed', String(autoRotate));
+      document.getElementById('rot-lbl').textContent = autoRotate ? 'Jeda Putar' : 'Putar 3D';
+      document.getElementById('ico-rot-pause').hidden = !autoRotate;
+      document.getElementById('ico-rot-play').hidden = autoRotate;
+
+      const ttsBtn = document.getElementById('btn-autotts');
+      ttsBtn.setAttribute('aria-pressed', String(autoTts));
+      ttsBtn.textContent = autoTts ? 'Aktif' : 'Mati';
+
+      const autoRotSet = document.getElementById('btn-autorotate');
+      autoRotSet.setAttribute('aria-pressed', String(autoRotate));
+      autoRotSet.textContent = autoRotate ? 'Aktif' : 'Mati';
+
+      const hideBtn = document.getElementById('btn-autohide');
+      hideBtn.setAttribute('aria-pressed', String(autoHide));
+      hideBtn.textContent = autoHide ? 'Aktif' : 'Mati';
+    }
+
+    // Fact card rendering & swipe support
+    function getCurrentFactText() {
+      if (!activeCode) return '';
+      const a = ANIMALS[activeCode];
+      if (showingFeedFact) return a.feedFact;
+      const lines = [a.intro, ...a.facts];
+      return lines[factIdx] || a.intro;
+    }
+
+    function renderFactCard(shouldSpeak = true) {
+      if (!activeCode) return;
+      const a = ANIMALS[activeCode];
+      const badge = document.getElementById('fact-badge');
+      const dots = document.getElementById('fact-dots');
+      const lines = [a.intro, ...a.facts];
+
+      if (showingFeedFact) {
+        badge.textContent = `Saat Makan: ${a.name}`;
+        badge.classList.add('feed');
+      } else {
+        badge.classList.remove('feed');
+        badge.textContent = factIdx === 0
+          ? `Perkenalan (${a.code})`
+          : `Fakta ${factIdx} dari ${a.facts.length}`;
+        markFactRead(a.code, factIdx);
+      }
+
+      dots.innerHTML = lines.map((_, i) =>
+        `<span class="f-dot ${!showingFeedFact && i === factIdx ? 'on' : ''}"></span>`
+      ).join('');
+
+      const text = getCurrentFactText();
+      document.getElementById('speech-text').textContent = text;
+      if (shouldSpeak && autoTts) speakText(text);
+    }
+
+    function stepFact(delta) {
+      if (!activeCode) return;
+      const total = 1 + ANIMALS[activeCode].facts.length;
+      if (showingFeedFact) {
+        showingFeedFact = false;
+      } else {
+        factIdx = (factIdx + delta + total) % total;
+      }
+      renderFactCard(true);
+    }
+
+    // Swipe gesture on fact card
+    let cardTouchX = null;
+    const factCardEl = document.getElementById('fact-card');
+    factCardEl.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) cardTouchX = e.touches[0].clientX;
+    }, { passive: true });
+    factCardEl.addEventListener('touchend', (e) => {
+      if (cardTouchX === null) return;
+      const dx = e.changedTouches[0].clientX - cardTouchX;
+      cardTouchX = null;
+      if (Math.abs(dx) > 46) stepFact(dx < 0 ? 1 : -1);
+    }, { passive: true });
+
+    // Show / load animal in 3D AR stage
+    async function showAnimal(rawCode, source = 'scan') {
+      // Map older ZC-06 penguin card code to ZC-05 for backward compatibility.
+      const code = rawCode === 'ZC-06' ? 'ZC-05' : rawCode;
+      const a = ANIMALS[code];
+      if (!a) return;
+      lastSeenTime = Date.now();
+      if (activeCode === code && source === 'scan' && !isDemoSession) return;
+
+      document.getElementById('cam-error').classList.remove('show');
+      const isNewUnlock = source === 'scan' && !progress.collected.has(code);
+      if (source === 'scan') {
+        progress.collected.add(code);
+        saveProgress();
+      }
+
+      activeCode = code;
+      isDemoSession = source === 'demo' && !progress.collected.has(code);
+      factIdx = 0;
+      showingFeedFact = false;
+      isScaleCompareOn = false;
+      setFocusMode(false);
+      zoomFactor = 1.0;
+      rotY = a.rotY;
+      rotX = 0.06;
+
+      document.body.classList.add('ar-active');
+      document.getElementById('scanner-overlay').classList.add('hidden');
+      document.getElementById('cam-scrim').classList.add('on');
+      document.getElementById('status-dot').classList.add('ready');
+
+      document.getElementById('h-stamp').innerHTML = STAMP_SVGS[a.id];
+      document.getElementById('h-name').textContent = a.name;
+      document.getElementById('h-demo').hidden = !isDemoSession;
+      document.getElementById('h-sci').textContent = a.sci;
+      const iucnEl = document.getElementById('h-iucn');
+      iucnEl.textContent = a.status;
+      iucnEl.className = 'iucn-tag ' + (a.statusType === 'vu' ? 'vu' : a.statusType === 'nt' ? 'nt' : '');
+
+      document.getElementById('feed-lbl').textContent = a.feedLabel;
+      document.getElementById('btn-scale').setAttribute('aria-pressed', 'false');
+      document.getElementById('btn-next-anim').hidden = true;
+      document.getElementById('ar-hud').classList.add('active');
+      webglLayer.classList.add('active');
+
+      if (isNewUnlock) showToast(`Kartu baru terbuka: ${a.name} (${a.code})`);
+      else if (isDemoSession) showToast(`Mode coba: ${a.name}. Pindai kartu untuk mengoleksinya.`, true);
+      else if (source === 'scan') showToast(`${a.name} muncul`, true);
+
+      renderFactCard(false);
+      playAnimalSound(a.id);
+      if (autoTts) {
+        setTimeout(() => {
+          if (activeCode === code && !showingFeedFact && factIdx === 0) speakText(a.intro);
+        }, 1800);
+      }
+
+      await loadActiveModel(a);
+    }
+
+    async function loadActiveModel(a) {
+      const loadingEl = document.getElementById('model-loading');
+      const errorEl = document.getElementById('model-error');
+      errorEl.classList.remove('show');
+      document.getElementById('loading-title').textContent = `Memuat ${a.name}...`;
+      loadingEl.classList.add('show');
+
+      try {
+        const entry = await getOrLoadAnimalModel(a);
+        if (activeCode !== a.code) return;
+
+        while (modelHolder.children.length) modelHolder.remove(modelHolder.children[0]);
+        modelHolder.add(entry.root);
+        activeEntry = entry;
+        currentScale = prefersReducedMotion ? 1.0 : 0.08;
+        stageGroup.visible = true;
+        updateScaleReferenceLayout();
+
+        const animBtn = document.getElementById('btn-next-anim');
+        if (entry.clips.length > 0) {
+          let startIdx = 0;
+          const pref = entry.clips.findIndex(c => /walk|howl|idle|run|take|anim/i.test(c.name) && !/prone/i.test(c.name));
+          if (pref >= 0) startIdx = pref;
+          playAnimationIndex(entry, startIdx);
+          animBtn.hidden = entry.clips.length <= 1;
+        } else {
+          animBtn.hidden = true;
+        }
+        loadingEl.classList.remove('show');
+      } catch (err) {
+        console.error('GLB load failed:', err);
+        loadingEl.classList.remove('show');
+        document.getElementById('error-desc').textContent = `Model ${a.name} (${a.file}) gagal dimuat dari perangkat.`;
+        errorEl.classList.add('show');
+      }
+    }
+
+    function setFocusMode(enabled) {
+      isFocusMode = Boolean(enabled);
+      document.body.classList.toggle('focus-mode', isFocusMode);
+      document.getElementById('btn-focus').setAttribute('aria-pressed', String(isFocusMode));
+    }
+
+    function backToPlainCamera() {
+      activeCode = null;
+      activeEntry = null;
+      isDemoSession = false;
+      isScaleCompareOn = false;
+      setFocusMode(false);
+      stopAnimalSound();
+      stopSpeak();
+      stageGroup.visible = false;
+      scaleRefGroup.visible = false;
+      renderer.clear();
+      document.body.classList.remove('ar-active');
+      webglLayer.classList.remove('active');
+      document.getElementById('ar-hud').classList.remove('active');
+      document.getElementById('cam-scrim').classList.remove('on');
+      document.getElementById('scanner-overlay').classList.remove('hidden');
+      document.getElementById('status-dot').classList.remove('ready');
+      document.getElementById('model-loading').classList.remove('show');
+      document.getElementById('model-error').classList.remove('show');
+    }
+
+    // Modal focus trap + Escape + backdrop dismissal
+    let activeModal = null;
+    let releaseTrap = null;
+    let lastModalTrigger = null;
+
+    function trapFocus(modal, onClose) {
+      const selector = 'button:not([disabled]):not([hidden]), select:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+      function getFocusable() {
+        return Array.from(modal.querySelectorAll(selector)).filter(el => el.offsetParent !== null);
+      }
+      function onKeydown(e) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          onClose();
+          return;
+        }
+        if (e.key !== 'Tab') return;
+        const list = getFocusable();
+        if (!list.length) return;
+        const first = list[0];
+        const last = list[list.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+      modal.addEventListener('keydown', onKeydown);
+      const initial = getFocusable();
+      if (initial.length) initial[0].focus();
+      return () => modal.removeEventListener('keydown', onKeydown);
+    }
+
+    function openModal(id, triggerEl) {
+      if (activeModal) closeModal();
+      const modal = document.getElementById(id);
+      if (!modal) return;
+      lastModalTrigger = triggerEl || document.activeElement;
+      activeModal = modal;
+      modal.classList.add('open');
+      releaseTrap = trapFocus(modal, closeModal);
+    }
+
+    function closeModal() {
+      if (!activeModal) return;
+      const closingId = activeModal.id;
+      activeModal.classList.remove('open');
+      if (releaseTrap) releaseTrap();
+      releaseTrap = null;
+      activeModal = null;
+      if (closingId === 'modal-welcome' && !progress.explorerSeen) {
+        progress.explorerSeen = true;
+        saveProgress();
+      }
+      if (lastModalTrigger && typeof lastModalTrigger.focus === 'function') {
+        lastModalTrigger.focus();
+      }
+      lastModalTrigger = null;
+    }
+
+    function openExplorerNameModal(isFirstRun, triggerEl) {
+      document.getElementById('welcome-title').textContent = isFirstRun
+        ? 'Selamat Datang, Penjelajah!'
+        : 'Ubah Nama Penjelajah';
+      document.getElementById('btn-welcome-save').textContent = isFirstRun
+        ? 'Mulai Jelajah'
+        : 'Simpan Nama';
+      document.getElementById('btn-welcome-skip').textContent = isFirstRun ? 'Lewati' : 'Batal';
+      document.getElementById('explorer-name-input').value = progress.explorerName || '';
+      openModal('modal-welcome', triggerEl);
+    }
+
+    document.querySelectorAll('.modal-bg').forEach(bg => {
+      bg.addEventListener('click', (e) => {
+        if (e.target === bg) closeModal();
+      });
+    });
+
+    document.querySelectorAll('[data-close]').forEach(btn => {
+      btn.addEventListener('click', closeModal);
+    });
+
+    // Android hardware Back routing
+    window.handleAndroidBack = () => {
+      if (activeModal) { closeModal(); return true; }
+      if (isFocusMode) { setFocusMode(false); return true; }
+      if (activeCode) { backToPlainCamera(); return true; }
+      return false;
+    };
+
+    // Bio & 3-question quiz sheet
+    function renderQuizStep(a) {
+      const q = a.quizzes[quizIdx];
+      document.getElementById('quiz-progress').textContent = `Tantangan Kilat (Soal ${quizIdx + 1} dari ${a.quizzes.length})`;
+      document.getElementById('quiz-star-badge').hidden = !progress.stars.has(a.code);
+      document.getElementById('quiz-q').textContent = q.q;
+
+      const optsWrap = document.getElementById('quiz-opts');
+      const fb = document.getElementById('quiz-fb');
+      const nextBtn = document.getElementById('btn-quiz-next');
+      const retryBtn = document.getElementById('btn-quiz-retry');
+      fb.textContent = '';
+      fb.classList.remove('wrong');
+      nextBtn.hidden = true;
+      retryBtn.hidden = true;
+
+      optsWrap.innerHTML = q.opts.map((opt, idx) =>
+        `<button type="button" class="quiz-opt" data-idx="${idx}">${String.fromCharCode(65 + idx)}. ${opt}</button>`
+      ).join('');
+
+      optsWrap.querySelectorAll('.quiz-opt').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const pick = Number(btn.dataset.idx);
+          const allBtns = optsWrap.querySelectorAll('.quiz-opt');
+          allBtns.forEach(b => b.disabled = true);
+          if (pick === q.ans) {
+            btn.classList.add('ok');
+            quizCorrectCount += 1;
+            fb.classList.remove('wrong');
+            fb.textContent = `Benar! ${q.explain}`;
+            speakText('Benar sekali! ' + q.explain);
+          } else {
+            btn.classList.add('no');
+            allBtns[q.ans].classList.add('ok');
+            fb.classList.add('wrong');
+            fb.textContent = `Belum tepat. ${q.explain}`;
+          }
+
+          if (quizIdx < a.quizzes.length - 1) {
+            nextBtn.textContent = `Lanjut ke Soal ${quizIdx + 2}`;
+            nextBtn.hidden = false;
+          } else {
+            const passed = quizCorrectCount >= 2;
+            if (passed) {
+              progress.stars.add(a.code);
+              saveProgress();
+              document.getElementById('quiz-star-badge').hidden = false;
+              fb.classList.remove('wrong');
+              fb.textContent = `Selesai! Skor kamu ${quizCorrectCount}/${a.quizzes.length}. Stempel Kuis ${a.name} berhasil diraih.`;
+            } else {
+              fb.classList.add('wrong');
+              fb.textContent = `Skor kamu ${quizCorrectCount}/${a.quizzes.length}. Jawab minimal 2 soal benar untuk meraih Stempel Kuis.`;
+            }
+            retryBtn.hidden = false;
+          }
+        });
+      });
+    }
+
+    function openBioSheet(triggerEl) {
+      if (!activeCode) return;
+      const a = ANIMALS[activeCode];
+      document.getElementById('bio-stamp').innerHTML = STAMP_SVGS[a.id];
+      document.getElementById('bio-title').textContent = a.name;
+
+      const iucn = document.getElementById('bio-iucn');
+      iucn.textContent = a.status;
+      iucn.className = 'iucn-tag ' + (a.statusType === 'vu' ? 'vu' : a.statusType === 'nt' ? 'nt' : '');
+      document.getElementById('bio-iucn-desc').textContent = a.statusMeaning;
+
+      document.getElementById('bio-diet').textContent = a.diet;
+      document.getElementById('bio-habitat').textContent = a.habitat;
+      document.getElementById('st-speed-val').textContent = a.speedVal;
+      document.getElementById('st-speed-bar').style.width = a.speedPct + '%';
+      document.getElementById('st-size-val').textContent = a.sizeVal;
+      document.getElementById('st-size-bar').style.width = a.sizePct + '%';
+      document.getElementById('st-weight-val').textContent = a.weightVal;
+      document.getElementById('st-weight-bar').style.width = a.weightPct + '%';
+      document.getElementById('bio-scale-note').textContent = a.scaleCompareNote;
+
+      quizIdx = 0;
+      quizCorrectCount = 0;
+      renderQuizStep(a);
+      openModal('modal-bio', triggerEl);
+    }
+
+    // Explorer Passport (Collection + Compare 2 Animals)
+    function switchPassportTab(tabName) {
+      const isCol = tabName === 'koleksi';
+      const tCol = document.getElementById('tab-koleksi');
+      const tCmp = document.getElementById('tab-bandingkan');
+      tCol.setAttribute('aria-selected', String(isCol));
+      tCol.tabIndex = isCol ? 0 : -1;
+      tCmp.setAttribute('aria-selected', String(!isCol));
+      tCmp.tabIndex = isCol ? -1 : 0;
+      document.getElementById('panel-koleksi').hidden = !isCol;
+      document.getElementById('panel-bandingkan').hidden = isCol;
+      if (!isCol) renderComparePanel();
+    }
+
+    function renderPassportCollection() {
+      const totalFacts = ANIMAL_CODES.reduce((acc, c) => acc + (progress.factsRead[c]?.length || 0), 0);
+      document.getElementById('sum-cards').textContent = `${progress.collected.size}/5`;
+      document.getElementById('sum-facts').textContent = `${totalFacts}/15`;
+      document.getElementById('sum-quiz').textContent = `${progress.stars.size}/5`;
+      document.getElementById('passport-empty').hidden = progress.collected.size > 0;
+
+      const grid = document.getElementById('album-grid');
+      grid.innerHTML = ANIMAL_CODES.map(code => {
+        const a = ANIMALS[code];
+        const unlocked = progress.collected.has(code);
+        const readCount = progress.factsRead[code]?.length || 0;
+        const quizDone = progress.stars.has(code);
+        return `
+          <button type="button" class="album-card ${unlocked ? 'unlocked' : ''}" data-code="${code}">
+            <div class="album-top">
+              <div class="album-stamp">${STAMP_SVGS[a.id]}</div>
+              <span class="specimen-code">${a.code}</span>
+            </div>
+            <div>
+              <div class="album-name">${unlocked ? a.name : 'Kartu Terkunci'}</div>
+              <div class="album-sub">${unlocked ? 'Ketuk untuk lihat 3D' : `Pindai kartu ${a.code}`}</div>
+            </div>
+            <div class="stamp-row">
+              <span class="mini-stamp ${unlocked ? 'done' : ''}">Scan</span>
+              <span class="mini-stamp ${readCount >= 3 ? 'done' : ''}">Fakta ${readCount}/3</span>
+              <span class="mini-stamp ${quizDone ? 'done' : ''}">Kuis</span>
+            </div>
+          </button>
+        `;
+      }).join('');
+
+      grid.querySelectorAll('.album-card').forEach(card => {
+        card.addEventListener('click', () => {
+          const code = card.dataset.code;
+          if (!progress.collected.has(code)) {
+            showToast(`Pindai kartu ${code} dulu untuk membuka koleksi ini.`, true);
+            return;
+          }
+          closeModal();
+          showAnimal(code, 'album');
+        });
+      });
+    }
+
+    function renderComparePanel() {
+      const unlockedList = ANIMAL_CODES.filter(c => progress.collected.has(c));
+      const canCompareOwned = unlockedList.length >= 2;
+      const showCompare = canCompareOwned || compareSampleMode;
+
+      document.getElementById('compare-empty').hidden = showCompare;
+      document.getElementById('compare-body').hidden = !showCompare;
+      if (!showCompare) {
+        document.getElementById('compare-empty-msg').textContent =
+          `Baru ${unlockedList.length} dari 5 kartu terbuka. Pindai minimal 2 kartu untuk membandingkan koleksimu, atau lihat contoh perbandingan lebih dulu.`;
+        return;
+      }
+
+      const pool = canCompareOwned ? unlockedList : ANIMAL_CODES;
+      const selA = document.getElementById('cmp-a');
+      const selB = document.getElementById('cmp-b');
+      const prevA = pool.includes(selA.value) ? selA.value : pool[0];
+      const prevB = pool.includes(selB.value) && selB.value !== prevA ? selB.value : (pool[1] || pool[0]);
+
+      const optionsHtml = pool.map(c => `<option value="${c}">${ANIMALS[c].name} (${c})</option>`).join('');
+      selA.innerHTML = optionsHtml;
+      selB.innerHTML = optionsHtml;
+      selA.value = prevA;
+      selB.value = prevB;
+      renderCompareResult();
+    }
+
+    function renderCompareResult() {
+      const a = ANIMALS[document.getElementById('cmp-a').value];
+      const b = ANIMALS[document.getElementById('cmp-b').value];
+      if (!a || !b) return;
+
+      const metrics = [
+        { label: 'Kecepatan Gerak', av: a.speedVal, ap: a.speedPct, bv: b.speedVal, bp: b.speedPct, cls: 'ochre', verb: 'Lebih cepat' },
+        { label: 'Ukuran Tubuh', av: a.sizeVal, ap: a.sizePct, bv: b.sizeVal, bp: b.sizePct, cls: '', verb: 'Lebih besar' },
+        { label: 'Berat Maksimal', av: a.weightVal, ap: a.weightPct, bv: b.weightVal, bp: b.weightPct, cls: 'sky', verb: 'Lebih berat' }
+      ];
+
+      const barsHtml = metrics.map(m => {
+        const win = m.ap === m.bp ? 'Seimbang' : `${m.verb}: ${m.ap > m.bp ? a.name : b.name}`;
+        return `
+          <div class="compare-metric">
+            <div class="compare-head">
+              <strong>${m.label}</strong>
+              <span class="compare-winner">${win}</span>
+            </div>
+            <div class="cmp-row">
+              <span class="cmp-name">${a.name}</span>
+              <div class="bar-track"><div class="bar-fill ${m.cls}" style="width:${m.ap}%"></div></div>
+              <span>${m.av}</span>
+            </div>
+            <div class="cmp-row">
+              <span class="cmp-name">${b.name}</span>
+              <div class="bar-track"><div class="bar-fill ${m.cls}" style="width:${m.bp}%"></div></div>
+              <span>${m.bv}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      document.getElementById('compare-result').innerHTML = `
+        ${barsHtml}
+        <div class="compare-facts">
+          <div class="cmp-info-card">
+            <strong>${a.name}</strong>
+            <div>Makanan: ${a.diet}</div>
+            <div>Habitat: ${a.habitat}</div>
+            <div>Status: ${a.status}</div>
+          </div>
+          <div class="cmp-info-card">
+            <strong>${b.name}</strong>
+            <div>Makanan: ${b.diet}</div>
+            <div>Habitat: ${b.habitat}</div>
+            <div>Status: ${b.status}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function openPassportSheet(triggerEl) {
+      renderPassportCollection();
+      switchPassportTab('koleksi');
+      openModal('modal-passport', triggerEl);
+    }
+
+    // AR Expedition Photo Capture (Camera + Three.js WebGL + Field Card Frame)
+    function wrapCanvasText(ctx, text, x, y, maxW, lineH, maxLines) {
+      const words = text.split(' ');
+      let line = '';
+      let lineCount = 0;
+      for (const word of words) {
+        const test = line ? `${line} ${word}` : word;
+        if (ctx.measureText(test).width > maxW && line) {
+          ctx.fillText(line, x, y + lineCount * lineH);
+          line = word;
+          lineCount += 1;
+          if (lineCount >= maxLines - 1) break;
+        } else {
+          line = test;
+        }
+      }
+      if (line && lineCount < maxLines) {
+        ctx.fillText(line, x, y + lineCount * lineH);
+      }
+    }
+
+    function captureArPhoto(triggerEl) {
+      if (!activeCode) return;
+      const a = ANIMALS[activeCode];
+      const W = 720;
+      const H = 960;
+      const stageH = 760;
+
+      const out = document.createElement('canvas');
+      out.width = W;
+      out.height = H;
+      const ctx = out.getContext('2d');
+
+      // Background: live camera frame cropped to cover, or calm field backdrop if camera unavailable.
+      if (video.readyState >= video.HAVE_CURRENT_DATA && video.videoWidth > 0) {
+        const vRatio = video.videoWidth / video.videoHeight;
+        const cRatio = W / stageH;
+        let sx = 0, sy = 0, sw = video.videoWidth, sh = video.videoHeight;
+        if (vRatio > cRatio) {
+          sw = video.videoHeight * cRatio;
+          sx = (video.videoWidth - sw) / 2;
+        } else {
+          sh = video.videoWidth / cRatio;
+          sy = (video.videoHeight - sh) / 2;
+        }
+        ctx.drawImage(video, sx, sy, sw, sh, 0, 0, W, stageH);
+      } else {
+        const grad = ctx.createLinearGradient(0, 0, 0, stageH);
+        grad.addColorStop(0, '#163024');
+        grad.addColorStop(1, '#2a4d3c');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, W, stageH);
+      }
+
+      // Render fresh WebGL frame synchronously before copying pixels.
+      renderer.render(scene, camera);
+      const glCanvas = renderer.domElement;
+      const gRatio = glCanvas.width / glCanvas.height;
+      const sRatio = W / stageH;
+      let dw = W, dh = stageH, dx = 0, dy = 0;
+      if (gRatio > sRatio) {
+        dh = W / gRatio;
+        dy = (stageH - dh) / 2;
+      } else {
+        dw = stageH * gRatio;
+        dx = (W - dw) / 2;
+      }
+      ctx.drawImage(glCanvas, 0, 0, glCanvas.width, glCanvas.height, dx, dy, dw, dh);
+
+      // Field-Journal bottom footer plate
+      ctx.fillStyle = '#fffdf7';
+      ctx.fillRect(0, stageH, W, H - stageH);
+      ctx.fillStyle = '#0b6b4b';
+      ctx.fillRect(0, stageH, W, 6);
+
+      ctx.fillStyle = '#16261e';
+      ctx.font = 'bold 30px sans-serif';
+      ctx.fillText(a.name, 28, stageH + 48);
+
+      ctx.fillStyle = '#42594d';
+      ctx.font = 'italic 19px sans-serif';
+      ctx.fillText(`${a.sci}  |  ${a.code}  |  ${a.status}`, 28, stageH + 78);
+
+      ctx.fillStyle = '#16261e';
+      ctx.font = '600 19px sans-serif';
+      wrapCanvasText(ctx, getCurrentFactText(), 28, stageH + 116, W - 56, 26, 3);
+
+      ctx.fillStyle = '#0b6b4b';
+      ctx.font = 'bold 16px sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText('ZooCard AR', W - 28, stageH + 44);
+      ctx.fillStyle = '#42594d';
+      ctx.font = '700 15px sans-serif';
+      ctx.fillText(`Penjelajah: ${getDisplayExplorerName()}`, W - 28, stageH + 68);
+      ctx.textAlign = 'left';
+
+      capturedPhotoDataUrl = out.toDataURL('image/png');
+      document.getElementById('photo-preview-img').src = capturedPhotoDataUrl;
+      document.getElementById('photo-status').textContent = '';
+      openModal('modal-photo', triggerEl);
+    }
+
+    function saveCapturedPhoto() {
+      if (!capturedPhotoDataUrl || !activeCode) return;
+      const a = ANIMALS[activeCode];
+      const stamp = new Date().toISOString().slice(0, 10);
+      const filename = `ZooCard-${a.id}-${stamp}.png`;
+      const statusEl = document.getElementById('photo-status');
+
+      if (window.AndroidBridge && typeof window.AndroidBridge.savePhoto === 'function') {
+        const res = window.AndroidBridge.savePhoto(capturedPhotoDataUrl, filename);
+        if (res === 'gallery') {
+          statusEl.textContent = 'Foto tersimpan di Galeri (folder Pictures/ZooCardAR).';
+        } else if (res === 'app_storage') {
+          statusEl.textContent = 'Foto tersimpan di penyimpanan gambar ZooCard AR.';
+        } else {
+          statusEl.textContent = 'Gagal menyimpan foto. Coba lagi.';
+        }
+        return;
+      }
+
+      const link = document.createElement('a');
+      link.href = capturedPhotoDataUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      statusEl.textContent = `Foto diunduh sebagai ${filename}.`;
+    }
+
+    // Rear camera and low-CPU offline QR marker scanning
+    const video = document.getElementById('cam-video');
+    const scanCanvas = document.getElementById('scan-canvas');
+    const scanCtx = scanCanvas.getContext('2d', { willReadFrequently: true });
+    let scanTimer = null;
+
+    async function startCamera() {
+      document.getElementById('cam-error').classList.remove('show');
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        if (!activeCode) document.getElementById('cam-error').classList.add('show');
+        return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 480 } },
+          audio: false
+        });
+        video.srcObject = stream;
+        await video.play();
+        if (!scanTimer) scanTimer = setInterval(scanTick, 200);
+      } catch {
+        if (!activeCode) document.getElementById('cam-error').classList.add('show');
+      }
+    }
+
+    function scanTick() {
+      if (activeCode && !autoHide) return;
+      if (activeModal) return;
+
+      if (video.readyState === video.HAVE_ENOUGH_DATA && typeof window.jsQR === 'function') {
+        const w = 280;
+        const h = Math.max(180, Math.round((video.videoHeight / Math.max(1, video.videoWidth)) * w));
+        if (scanCanvas.width !== w || scanCanvas.height !== h) {
+          scanCanvas.width = w;
+          scanCanvas.height = h;
+        }
+        scanCtx.drawImage(video, 0, 0, w, h);
+        const img = scanCtx.getImageData(0, 0, w, h);
+        const res = window.jsQR(img.data, w, h, { inversionAttempts: 'dontInvert' });
+        if (res && res.data) {
+          const m = res.data.toUpperCase().match(/ZC-0[1-6]/);
+          if (m) showAnimal(m[0], 'scan');
+        }
+      }
+
+      if (activeCode && autoHide && !isDemoSession && Date.now() - lastSeenTime > 2400) {
+        backToPlainCamera();
+      }
+    }
+
+    // Event wiring
+    document.getElementById('btn-try-demo').addEventListener('click', () => showAnimal('ZC-01', 'demo'));
+    document.getElementById('btn-cam-demo').addEventListener('click', () => showAnimal('ZC-01', 'demo'));
+    document.getElementById('btn-empty-demo').addEventListener('click', () => {
+      closeModal();
+      showAnimal('ZC-01', 'demo');
+    });
+
+    document.getElementById('btn-back-scan').addEventListener('click', backToPlainCamera);
+    document.getElementById('btn-rescan').addEventListener('click', backToPlainCamera);
+    document.getElementById('btn-error-back').addEventListener('click', backToPlainCamera);
+    document.getElementById('btn-retry-model').addEventListener('click', () => {
+      if (activeCode) loadActiveModel(ANIMALS[activeCode]);
+    });
+
+    document.getElementById('btn-focus').addEventListener('click', () => setFocusMode(!isFocusMode));
+    document.getElementById('btn-exit-focus').addEventListener('click', () => setFocusMode(false));
+
+    document.getElementById('btn-feed').addEventListener('click', () => {
+      if (!activeCode) return;
+      const a = ANIMALS[activeCode];
+      showingFeedFact = true;
+      bounceTimer = prefersReducedMotion ? 0 : 0.72;
+      spawnBurst('feed', a.feedColor);
+      playAnimalSound(a.id);
+      renderFactCard(true);
+      showToast(`${a.name} sedang makan!`);
+    });
+
+    document.getElementById('btn-scale').addEventListener('click', (e) => {
+      if (!activeCode) return;
+      isScaleCompareOn = !isScaleCompareOn;
+      e.currentTarget.setAttribute('aria-pressed', String(isScaleCompareOn));
+      updateScaleReferenceLayout();
+      showToast(isScaleCompareOn ? 'Pembanding tinggi anak 1,2 m aktif' : 'Pembanding tinggi disembunyikan', true);
+    });
+
+    document.getElementById('btn-next-anim').addEventListener('click', () => {
+      if (!activeEntry || activeEntry.clips.length < 2) return;
+      playAnimationIndex(activeEntry, activeClipIdx + 1);
+      const nm = activeEntry.clips[activeClipIdx].name || `Gerakan ${activeClipIdx + 1}`;
+      showToast(`Gerakan: ${nm}`, true);
+    });
+
+    function toggleAutoRotate() {
+      autoRotate = !autoRotate;
+      saveProgress();
+      syncControlStates();
+    }
+    document.getElementById('btn-rotate-toggle').addEventListener('click', toggleAutoRotate);
+    document.getElementById('btn-autorotate').addEventListener('click', toggleAutoRotate);
+
+    document.getElementById('btn-speak-toggle').addEventListener('click', () => {
+      if (!activeCode) return;
+      if (isSpeaking) {
+        stopSpeak();
+      } else {
+        if (isMuted) {
+          isMuted = false;
+          saveProgress();
+          syncControlStates();
+        }
+        speakText(getCurrentFactText());
+      }
+    });
+
+    document.getElementById('btn-fact-prev').addEventListener('click', () => stepFact(-1));
+    document.getElementById('btn-fact-next').addEventListener('click', () => stepFact(1));
+
+    document.getElementById('btn-sound').addEventListener('click', () => {
+      if (!activeCode) return;
+      if (isMuted) {
+        showToast('Suara sedang dimatikan. Ketuk tombol suara di atas untuk menyalakan.', true);
+        return;
+      }
+      bounceTimer = prefersReducedMotion ? 0 : 0.45;
+      playAnimalSound(ANIMALS[activeCode].id);
+    });
+
+    document.getElementById('btn-photo').addEventListener('click', (e) => captureArPhoto(e.currentTarget));
+    document.getElementById('btn-photo-focus').addEventListener('click', (e) => captureArPhoto(e.currentTarget));
+    document.getElementById('btn-save-photo').addEventListener('click', saveCapturedPhoto);
+
+    document.getElementById('btn-bio').addEventListener('click', (e) => openBioSheet(e.currentTarget));
+    document.getElementById('btn-quiz-next').addEventListener('click', () => {
+      if (!activeCode) return;
+      quizIdx += 1;
+      renderQuizStep(ANIMALS[activeCode]);
+    });
+    document.getElementById('btn-quiz-retry').addEventListener('click', () => {
+      if (!activeCode) return;
+      quizIdx = 0;
+      quizCorrectCount = 0;
+      renderQuizStep(ANIMALS[activeCode]);
+    });
+
+    document.getElementById('btn-passport').addEventListener('click', (e) => openPassportSheet(e.currentTarget));
+    document.getElementById('btn-passport-rail').addEventListener('click', (e) => openPassportSheet(e.currentTarget));
+    document.getElementById('tab-koleksi').addEventListener('click', () => switchPassportTab('koleksi'));
+    document.getElementById('tab-bandingkan').addEventListener('click', () => switchPassportTab('bandingkan'));
+
+    document.querySelector('.tab-bar').addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        e.preventDefault();
+        const isCol = document.getElementById('tab-koleksi').getAttribute('aria-selected') === 'true';
+        switchPassportTab(isCol ? 'bandingkan' : 'koleksi');
+        document.getElementById(isCol ? 'tab-bandingkan' : 'tab-koleksi').focus();
+      }
+    });
+
+    document.getElementById('btn-compare-sample').addEventListener('click', () => {
+      compareSampleMode = true;
+      renderComparePanel();
+    });
+    document.getElementById('cmp-a').addEventListener('change', renderCompareResult);
+    document.getElementById('cmp-b').addEventListener('change', renderCompareResult);
+
+    document.getElementById('btn-settings').addEventListener('click', (e) => {
+      document.getElementById('reset-confirm').classList.remove('show');
+      openModal('modal-settings', e.currentTarget);
+    });
+
+    document.getElementById('btn-mute').addEventListener('click', () => {
+      isMuted = !isMuted;
+      if (isMuted) {
+        stopAnimalSound();
+        stopSpeak();
+      }
+      saveProgress();
+      syncControlStates();
+    });
+
+    document.getElementById('btn-autotts').addEventListener('click', () => {
+      autoTts = !autoTts;
+      if (!autoTts) stopSpeak();
+      saveProgress();
+      syncControlStates();
+    });
+
+    document.getElementById('btn-autohide').addEventListener('click', () => {
+      autoHide = !autoHide;
+      saveProgress();
+      syncControlStates();
+    });
+
+    document.getElementById('btn-reset-ask').addEventListener('click', () => {
+      document.getElementById('reset-confirm').classList.add('show');
+    });
+    document.getElementById('btn-reset-no').addEventListener('click', () => {
+      document.getElementById('reset-confirm').classList.remove('show');
+    });
+    document.getElementById('btn-reset-yes').addEventListener('click', () => {
+      progress.collected.clear();
+      progress.stars.clear();
+      progress.factsRead = {};
+      compareSampleMode = false;
+      saveProgress();
+      document.getElementById('reset-confirm').classList.remove('show');
+      showToast('Progres paspor telah direset.', true);
+    });
+
+    document.getElementById('btn-retry-cam').addEventListener('click', startCamera);
+
+    // Optional local Explorer Name form & triggers
+    document.getElementById('welcome-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const raw = document.getElementById('explorer-name-input').value.trim().slice(0, 24);
+      progress.explorerName = raw;
+      progress.explorerSeen = true;
+      saveProgress();
+      closeModal();
+      showToast(raw ? `Halo ${raw}, siap menjelajah!` : 'Mode Penjelajah siap digunakan.', true);
+    });
+
+    document.getElementById('btn-welcome-skip').addEventListener('click', () => {
+      progress.explorerSeen = true;
+      saveProgress();
+      closeModal();
+    });
+
+    document.getElementById('explorer-name-input').addEventListener('focus', (e) => {
+      setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 220);
+    });
+
+    document.getElementById('btn-edit-name-passport').addEventListener('click', (e) => {
+      openExplorerNameModal(false, e.currentTarget);
+    });
+
+    document.getElementById('btn-edit-name-settings').addEventListener('click', (e) => {
+      openExplorerNameModal(false, e.currentTarget);
+    });
+
+    function runLaunchSplash() {
+      const splash = document.getElementById('app-splash');
+      const bar = document.getElementById('splash-bar-fill');
+      const status = document.getElementById('splash-status');
+      const finish = () => {
+        splash.classList.add('done');
+        if (!progress.explorerSeen) {
+          setTimeout(() => openExplorerNameModal(true), prefersReducedMotion ? 50 : 260);
+        }
+      };
+
+      if (prefersReducedMotion) {
+        bar.style.width = '100%';
+        status.textContent = 'Siap menjelajah!';
+        setTimeout(finish, 140);
+        return;
+      }
+
+      requestAnimationFrame(() => { bar.style.width = '58%'; });
+      setTimeout(() => {
+        bar.style.width = '100%';
+        status.textContent = 'Siap menjelajah!';
+      }, 480);
+      setTimeout(finish, 940);
+    }
+
+    saveProgress();
+    syncControlStates();
+    startCamera();
+    runLaunchSplash();
+  </script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+# Gradle and build outputs
+.gradle/
+build/
+app/build/
+
+# Machine-local SDK config and IDE files
+local.properties
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
